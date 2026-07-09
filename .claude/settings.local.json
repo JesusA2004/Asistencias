@@ -1,7 +1,16 @@
 {
   "permissions": {
     "allow": [
-      "PowerShell(Get-ChildItem \"C:\\\\wamp64\\\\www\\\\Asistencias\\\\resources\\\\js\" -Recurse | Where-Object { !$_.PSIsContainer } | ForEach-Object { $_.FullName.Replace\\(\"C:\\\\wamp64\\\\www\\\\Asistencias\\\\resources\\\\js\\\\\", \"\"\\) })"
+      "PowerShell(Get-ChildItem \"C:\\\\wamp64\\\\www\\\\Asistencias\\\\resources\\\\js\" -Recurse | Where-Object { !$_.PSIsContainer } | ForEach-Object { $_.FullName.Replace\\(\"C:\\\\wamp64\\\\www\\\\Asistencias\\\\resources\\\\js\\\\\", \"\"\\) })",
+      "Bash(npm install *)",
+      "Bash(npx shadcn-vue@latest *)",
+      "Bash(php artisan *)",
+      "Bash(npm run *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\wamp64\\\\www\\\\Asistencias\" -Force)",
+      "Bash(Select-Object -ExpandProperty Name)",
+      "Bash(New-Item -ItemType Directory -Force -Path \"C:\\\\wamp64\\\\www\\\\Asistencias\\\\lang\\\\es\")",
+      "Bash(Out-Null)",
+      "Bash(Write-Output \"OK\")"
     ]
   }
 }

@@ -1,0 +1,34 @@
+<?php
+
+namespace App\Policies;
+
+use App\Models\Attendance;
+use App\Models\User;
+
+class AttendancePolicy
+{
+    public function viewAny(User $user): bool
+    {
+        return $user->can('Ver asistencias');
+    }
+
+    public function view(User $user, Attendance $attendance): bool
+    {
+        return $user->can('Ver asistencias');
+    }
+
+    public function create(User $user): bool
+    {
+        return $user->can('Registrar asistencias');
+    }
+
+    public function update(User $user, Attendance $attendance): bool
+    {
+        return $user->can('Corregir asistencias') || $user->can('Editar asistencias');
+    }
+
+    public function delete(User $user, Attendance $attendance): bool
+    {
+        return $user->can('Eliminar asistencias');
+    }
+}

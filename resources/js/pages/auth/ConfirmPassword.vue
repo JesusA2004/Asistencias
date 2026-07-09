@@ -1,42 +1,38 @@
 <script setup lang="ts">
 import { Form, Head } from '@inertiajs/vue3';
+import {
+    index as confirmOptions,
+    store as confirmStore,
+} from '@/actions/Laravel/Passkeys/Http/Controllers/PasskeyConfirmationController';
 import InputError from '@/components/InputError.vue';
+import PasskeyVerify from '@/components/PasskeyVerify.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { store } from '@/routes/password/confirm';
-/* @chisel-passkeys */
-import {
-    index as confirmOptions,
-    store as confirmStore,
-} from '@/actions/Laravel/Passkeys/Http/Controllers/PasskeyConfirmationController';
-import PasskeyVerify from '@/components/PasskeyVerify.vue';
-/* @end-chisel-passkeys */
 
 defineOptions({
     layout: {
-        title: 'Confirm password',
+        title: 'Confirmar contraseña',
         description:
-            'This is a secure area of the application. Please confirm your password before continuing.',
+            'Esta es un área segura del sistema. Confirma tu contraseña antes de continuar.',
     },
 });
 </script>
 
 <template>
-    <Head title="Confirm password" />
+    <Head title="Confirmar contraseña — SGA" />
 
-    <!-- @chisel-passkeys -->
     <PasskeyVerify
         :routes="{
             options: confirmOptions(),
             submit: confirmStore(),
         }"
-        label="Confirm with passkey"
-        loading-label="Confirming..."
-        separator="Or confirm with password"
+        label="Confirmar con passkey"
+        loading-label="Confirmando..."
+        separator="O confirmar con contraseña"
     />
-    <!-- @end-chisel-passkeys -->
 
     <Form
         v-bind="store.form()"
@@ -45,7 +41,7 @@ defineOptions({
     >
         <div class="space-y-6">
             <div class="grid gap-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">Contraseña</Label>
                 <PasswordInput
                     id="password"
                     name="password"
@@ -65,7 +61,7 @@ defineOptions({
                     data-test="confirm-password-button"
                 >
                     <Spinner v-if="processing" />
-                    Confirm password
+                    Confirmar contraseña
                 </Button>
             </div>
         </div>
