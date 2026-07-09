@@ -1,20 +1,20 @@
 <script setup lang="ts">
-import { ref } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
 import { Pencil, Trash2 } from '@lucide/vue';
-import DeleteDialog from '@/components/DeleteDialog.vue';
-import EmptyState from '@/components/EmptyState.vue';
+import type {ColumnDef} from '@tanstack/vue-table';
+import { ref } from 'vue';
+import AppDataTable from '@/components/AppDataTable.vue';
+import DatePicker from '@/components/DatePicker.vue';
+import FormActions from '@/components/FormActions.vue';
+import FormDialogContent from '@/components/FormDialogContent.vue';
+import FormField from '@/components/FormField.vue';
+import FormTextarea from '@/components/FormTextarea.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import StatusBadge from '@/components/StatusBadge.vue';
 import { Button } from '@/components/ui/button';
-import {
-    Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
-} from '@/components/ui/dialog';
+import { Dialog, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-    Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { usePermissions } from '@/composables/usePermissions';
 import type { Attendance, Client, PaginatedData, ServicePoint } from '@/types/models';
@@ -43,6 +43,7 @@ const correctForm = useForm({
 
 const openCorrect = (a: Attendance) => {
     correctingAttendance.value = a;
+    correctForm.clearErrors();
     correctForm.status = a.status;
     correctForm.entry_time = a.entry_time ?? '';
     correctForm.exit_time = a.exit_time ?? '';
@@ -52,9 +53,14 @@ const openCorrect = (a: Attendance) => {
 };
 
 const submitCorrect = () => {
-    if (!correctingAttendance.value) return;
+    if (!correctingAttendance.value) {
+return;
+}
+
     correctForm.patch(`/asistencias/${correctingAttendance.value.id}/corregir`, {
-        onSuccess: () => { showCorrectModal.value = false; },
+        onSuccess: () => {
+ showCorrectModal.value = false; 
+},
     });
 };
 
@@ -65,10 +71,15 @@ const openDelete = (id: number) => {
 };
 
 const confirmDelete = () => {
-    if (!deleteId.value) return;
+    if (!deleteId.value) {
+return;
+}
+
     router.delete(`/asistencias/${deleteId.value}`, {
         data: { reason: deleteReason.value },
-        onSuccess: () => { showDeleteModal.value = false; deleteId.value = null; },
+        onSuccess: () => {
+ showDeleteModal.value = false; deleteId.value = null; 
+},
     });
 };
 
@@ -89,6 +100,16 @@ const applyFilters = () => {
 };
 
 const STATUSES = ['presente', 'falta', 'descanso', 'permiso', 'incapacidad', 'retardo'];
+
+const columns: ColumnDef<Attendance>[] = [
+    { accessorKey: 'attendance_date', header: 'Fecha' },
+    { accessorKey: 'employee', header: 'Colaborador' },
+    { accessorKey: 'client', header: 'Empresa', cell: ({ row }) => row.original.client?.name },
+    { accessorKey: 'service_point', header: 'Punto', cell: ({ row }) => row.original.service_point?.name },
+    { accessorKey: 'status', header: 'Estado' },
+    { accessorKey: 'schedule', header: 'Horario' },
+    { accessorKey: 'supervisor', header: 'Supervisor', cell: ({ row }) => row.original.supervisor?.name },
+];
 </script>
 
 <template>
@@ -97,108 +118,73 @@ const STATUSES = ['presente', 'falta', 'descanso', 'permiso', 'incapacidad', 're
 
         <!-- Filters -->
         <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6 bg-muted/30 p-4 rounded-lg border">
-            <div>
-                <Label class="text-xs">Fecha</Label>
-                <Input type="date" v-model="filterDate" class="mt-1 h-8 text-sm" @change="applyFilters" />
-            </div>
-            <div>
-                <Label class="text-xs">Empresa</Label>
-                <Select :model-value="filterClient || '__all__'" @update:model-value="(v) => { filterClient = v === '__all__' ? '' : (v as string); applyFilters(); }">
-                    <SelectTrigger class="mt-1 h-8 text-sm"><SelectValue placeholder="Todas" /></SelectTrigger>
+            <FormField label="Fecha" class="text-xs">
+                <DatePicker v-model="filterDate" placeholder="Todas las fechas" @update:model-value="applyFilters" />
+            </FormField>
+            <FormField label="Empresa" class="text-xs">
+                <Select :model-value="filterClient || '__all__'" @update:model-value="(v) => { filterClient = v === '__all__' ? '' : String(v); applyFilters(); }">
+                    <SelectTrigger class="w-full"><SelectValue placeholder="Todas" /></SelectTrigger>
                     <SelectContent>
                         <SelectItem value="__all__">Todas</SelectItem>
                         <SelectItem v-for="c in clients" :key="c.id" :value="String(c.id)">{{ c.name }}</SelectItem>
                     </SelectContent>
                 </Select>
-            </div>
-            <div>
-                <Label class="text-xs">Punto Servicio</Label>
-                <Select :model-value="filterSP || '__all__'" @update:model-value="(v) => { filterSP = v === '__all__' ? '' : (v as string); applyFilters(); }">
-                    <SelectTrigger class="mt-1 h-8 text-sm"><SelectValue placeholder="Todos" /></SelectTrigger>
+            </FormField>
+            <FormField label="Punto Servicio" class="text-xs">
+                <Select :model-value="filterSP || '__all__'" @update:model-value="(v) => { filterSP = v === '__all__' ? '' : String(v); applyFilters(); }">
+                    <SelectTrigger class="w-full"><SelectValue placeholder="Todos" /></SelectTrigger>
                     <SelectContent>
                         <SelectItem value="__all__">Todos</SelectItem>
                         <SelectItem v-for="sp in servicePoints" :key="sp.id" :value="String(sp.id)">{{ sp.name }}</SelectItem>
                     </SelectContent>
                 </Select>
-            </div>
-            <div>
-                <Label class="text-xs">Estado</Label>
-                <Select :model-value="filterStatus || '__all__'" @update:model-value="(v) => { filterStatus = v === '__all__' ? '' : (v as string); applyFilters(); }">
-                    <SelectTrigger class="mt-1 h-8 text-sm"><SelectValue placeholder="Todos" /></SelectTrigger>
+            </FormField>
+            <FormField label="Estado" class="text-xs">
+                <Select :model-value="filterStatus || '__all__'" @update:model-value="(v) => { filterStatus = v === '__all__' ? '' : String(v); applyFilters(); }">
+                    <SelectTrigger class="w-full"><SelectValue placeholder="Todos" /></SelectTrigger>
                     <SelectContent>
                         <SelectItem value="__all__">Todos</SelectItem>
                         <SelectItem v-for="s in STATUSES" :key="s" :value="s">{{ s.charAt(0).toUpperCase() + s.slice(1) }}</SelectItem>
                     </SelectContent>
                 </Select>
-            </div>
+            </FormField>
             <div class="flex items-end">
                 <Button variant="outline" size="sm" class="w-full" @click="applyFilters">Filtrar</Button>
             </div>
         </div>
 
-        <!-- Table -->
-        <div class="rounded-lg border bg-card overflow-hidden">
-            <table class="w-full text-sm">
-                <thead class="bg-muted/30">
-                    <tr>
-                        <th class="text-left p-3 text-xs uppercase tracking-wider text-muted-foreground font-semibold">Fecha</th>
-                        <th class="text-left p-3 text-xs uppercase tracking-wider text-muted-foreground font-semibold">Colaborador</th>
-                        <th class="text-left p-3 text-xs uppercase tracking-wider text-muted-foreground font-semibold">Empresa</th>
-                        <th class="text-left p-3 text-xs uppercase tracking-wider text-muted-foreground font-semibold">Punto</th>
-                        <th class="text-left p-3 text-xs uppercase tracking-wider text-muted-foreground font-semibold">Estado</th>
-                        <th class="text-center p-3 text-xs uppercase tracking-wider text-muted-foreground font-semibold">Horario</th>
-                        <th class="text-left p-3 text-xs uppercase tracking-wider text-muted-foreground font-semibold">Supervisor</th>
-                        <th class="text-right p-3"></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr v-if="!attendances.data.length">
-                        <td colspan="8"><EmptyState title="Sin registros" description="No hay asistencias con los filtros seleccionados." /></td>
-                    </tr>
-                    <tr
-                        v-for="a in attendances.data"
-                        :key="a.id"
-                        class="border-t hover:bg-muted/40 transition-colors"
-                    >
-                        <td class="p-3 font-mono text-xs">{{ a.attendance_date }}</td>
-                        <td class="p-3">
-                            <div class="font-medium text-sm">{{ a.employee?.name }} {{ a.employee?.last_name }}</div>
-                            <div class="text-xs text-muted-foreground font-mono">{{ a.employee?.employee_number }}</div>
-                        </td>
-                        <td class="p-3 text-sm">{{ a.client?.name }}</td>
-                        <td class="p-3 text-sm">{{ a.service_point?.name }}</td>
-                        <td class="p-3"><StatusBadge :status="a.status" /></td>
-                        <td class="p-3 text-center text-xs font-mono">
-                            {{ a.entry_time ?? '--:--' }} – {{ a.exit_time ?? '--:--' }}
-                        </td>
-                        <td class="p-3 text-sm">{{ a.supervisor?.name }}</td>
-                        <td class="p-3">
-                            <div class="flex items-center justify-end gap-1">
-                                <Button v-if="hasPermission('Corregir asistencias')" variant="ghost" size="sm" @click="openCorrect(a)">
-                                    <Pencil class="h-3.5 w-3.5" />
-                                </Button>
-                                <Button v-if="hasPermission('Eliminar asistencias')" variant="ghost" size="sm" class="text-destructive" @click="openDelete(a.id)">
-                                    <Trash2 class="h-3.5 w-3.5" />
-                                </Button>
-                            </div>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <!-- Pagination -->
-        <div v-if="attendances.last_page > 1" class="flex justify-between items-center mt-4 text-sm">
-            <span class="text-muted-foreground">{{ attendances.from }}–{{ attendances.to }} de {{ attendances.total }}</span>
-            <div class="flex gap-1">
-                <Button variant="outline" size="sm" :disabled="attendances.current_page <= 1" @click="onPage(attendances.current_page - 1)">Ant</Button>
-                <Button variant="outline" size="sm" :disabled="attendances.current_page >= attendances.last_page" @click="onPage(attendances.current_page + 1)">Sig</Button>
-            </div>
-        </div>
+        <AppDataTable
+            :columns="columns"
+            :data="attendances.data"
+            :pagination="attendances"
+            :searchable="false"
+            empty-title="Sin registros"
+            empty-description="No hay asistencias con los filtros seleccionados."
+            @page-change="onPage"
+        >
+            <template #cell-employee="{ item }">
+                <div class="font-medium text-sm">{{ item.employee?.name }} {{ item.employee?.last_name }}</div>
+                <div class="text-xs text-muted-foreground font-mono">{{ item.employee?.employee_number }}</div>
+            </template>
+            <template #cell-status="{ item }">
+                <StatusBadge :status="item.status" />
+            </template>
+            <template #cell-schedule="{ item }">
+                <span class="text-xs font-mono">{{ item.entry_time ?? '--:--' }} – {{ item.exit_time ?? '--:--' }}</span>
+            </template>
+            <template #actions="{ item }">
+                <Button v-if="hasPermission('Corregir asistencias')" variant="ghost" size="sm" @click="openCorrect(item)">
+                    <Pencil class="h-3.5 w-3.5" />
+                </Button>
+                <Button v-if="hasPermission('Eliminar asistencias')" variant="ghost" size="sm" class="text-destructive" @click="openDelete(item.id)">
+                    <Trash2 class="h-3.5 w-3.5" />
+                </Button>
+            </template>
+        </AppDataTable>
 
         <!-- Correct modal -->
         <Dialog :open="showCorrectModal" @update:open="showCorrectModal = $event">
-            <DialogContent class="max-w-md">
+            <FormDialogContent class="max-w-md">
                 <DialogHeader>
                     <DialogTitle>Corregir Asistencia</DialogTitle>
                     <DialogDescription>
@@ -206,56 +192,49 @@ const STATUSES = ['presente', 'falta', 'descanso', 'permiso', 'incapacidad', 're
                     </DialogDescription>
                 </DialogHeader>
                 <form @submit.prevent="submitCorrect" class="space-y-4">
-                    <div>
-                        <Label>Estado *</Label>
+                    <FormField label="Estado" required :error="correctForm.errors.status">
                         <Select v-model="correctForm.status">
-                            <SelectTrigger class="mt-1"><SelectValue /></SelectTrigger>
+                            <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
                             <SelectContent>
                                 <SelectItem v-for="s in STATUSES" :key="s" :value="s">{{ s.charAt(0).toUpperCase() + s.slice(1) }}</SelectItem>
                             </SelectContent>
                         </Select>
-                    </div>
+                    </FormField>
                     <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <Label>Entrada</Label>
-                            <Input type="time" v-model="correctForm.entry_time" class="mt-1" />
-                        </div>
-                        <div>
-                            <Label>Salida</Label>
-                            <Input type="time" v-model="correctForm.exit_time" class="mt-1" />
-                        </div>
+                        <FormField label="Entrada">
+                            <Input type="time" v-model="correctForm.entry_time" />
+                        </FormField>
+                        <FormField label="Salida">
+                            <Input type="time" v-model="correctForm.exit_time" />
+                        </FormField>
                     </div>
-                    <div>
-                        <Label>Notas</Label>
-                        <Textarea v-model="correctForm.notes" class="mt-1" rows="2" />
-                    </div>
-                    <div>
-                        <Label>Motivo de corrección *</Label>
-                        <Textarea v-model="correctForm.reason" class="mt-1" rows="3" placeholder="Describe el motivo de la corrección (mínimo 10 caracteres)..." required />
-                        <p v-if="correctForm.errors.reason" class="text-destructive text-xs mt-1">{{ correctForm.errors.reason }}</p>
-                    </div>
-                    <DialogFooter>
-                        <Button type="button" variant="outline" @click="showCorrectModal = false">Cancelar</Button>
-                        <Button type="submit" :disabled="correctForm.processing">Guardar Corrección</Button>
-                    </DialogFooter>
+                    <FormTextarea v-model="correctForm.notes" label="Notas" :rows="2" :error="correctForm.errors.notes" />
+                    <FormTextarea
+                        v-model="correctForm.reason"
+                        label="Motivo de corrección"
+                        required
+                        :rows="3"
+                        placeholder="Describe el motivo de la corrección (mínimo 10 caracteres)..."
+                        :error="correctForm.errors.reason"
+                    />
+                    <FormActions submit-label="Guardar Corrección" :processing="correctForm.processing" @cancel="showCorrectModal = false" />
                 </form>
-            </DialogContent>
+            </FormDialogContent>
         </Dialog>
 
         <!-- Delete modal with reason -->
         <Dialog :open="showDeleteModal" @update:open="showDeleteModal = $event">
-            <DialogContent class="max-w-md">
+            <FormDialogContent class="max-w-md">
                 <DialogHeader>
                     <DialogTitle>¿Eliminar asistencia?</DialogTitle>
                     <DialogDescription>Esta acción registrará la eliminación en auditoría. Ingresa el motivo obligatorio.</DialogDescription>
                 </DialogHeader>
                 <div class="space-y-4 py-2">
-                    <div>
-                        <Label>Motivo de eliminación *</Label>
-                        <Textarea v-model="deleteReason" class="mt-1" rows="3" placeholder="Describe el motivo..." />
-                    </div>
+                    <FormField label="Motivo de eliminación" required hint="Mínimo 10 caracteres.">
+                        <Textarea v-model="deleteReason" :rows="3" placeholder="Describe el motivo..." />
+                    </FormField>
                 </div>
-                <DialogFooter>
+                <div class="flex justify-end gap-2">
                     <Button variant="outline" @click="showDeleteModal = false">Cancelar</Button>
                     <Button
                         variant="destructive"
@@ -264,8 +243,8 @@ const STATUSES = ['presente', 'falta', 'descanso', 'permiso', 'incapacidad', 're
                     >
                         Eliminar
                     </Button>
-                </DialogFooter>
-            </DialogContent>
+                </div>
+            </FormDialogContent>
         </Dialog>
     </div>
 </template>

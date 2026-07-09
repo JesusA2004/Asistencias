@@ -40,9 +40,7 @@ class EmployeeController extends Controller
         return Inertia::render('admin/Employees/Index', [
             'employees' => $employees,
             'clients' => Client::where('status', 'activo')->orderBy('name')->get(['id', 'name']),
-            'servicePoints' => $request->client_id
-                ? ServicePoint::where('client_id', $request->client_id)->where('status', 'activo')->orderBy('name')->get(['id', 'name', 'client_id'])
-                : [],
+            'servicePoints' => ServicePoint::where('status', 'activo')->orderBy('name')->get(['id', 'name', 'client_id']),
             'shifts' => Shift::where('status', 'activo')->orderBy('name')->get(['id', 'name']),
             'filters' => $request->only(['search', 'client_id', 'service_point_id', 'status']),
         ]);

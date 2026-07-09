@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { LucideIcon } from '@lucide/vue';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 defineProps<{
     title: string;

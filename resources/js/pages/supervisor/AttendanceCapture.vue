@@ -1,17 +1,15 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
 import { CheckCircle2, ClipboardList, Save } from '@lucide/vue';
+import { ref, computed } from 'vue';
+import DatePicker from '@/components/DatePicker.vue';
+import FormField from '@/components/FormField.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import StatusBadge from '@/components/StatusBadge.vue';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-    Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { Attendance, AttendanceStatus, Client, Employee, ServicePoint } from '@/types/models';
 
 const props = defineProps<{
@@ -28,13 +26,13 @@ const selectedClient = ref(props.filters.client_id ?? '');
 const selectedSP = ref(props.filters.service_point_id ?? '');
 const selectedDate = ref(props.filters.date ?? today);
 
-const STATUSES: { value: AttendanceStatus; label: string; color: string }[] = [
-    { value: 'presente', label: 'Presente', color: 'bg-green-100 text-green-700 border-green-200 hover:bg-green-200' },
-    { value: 'falta', label: 'Falta', color: 'bg-red-100 text-red-700 border-red-200 hover:bg-red-200' },
-    { value: 'retardo', label: 'Retardo', color: 'bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200' },
-    { value: 'descanso', label: 'Descanso', color: 'bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200' },
-    { value: 'permiso', label: 'Permiso', color: 'bg-yellow-100 text-yellow-700 border-yellow-200 hover:bg-yellow-200' },
-    { value: 'incapacidad', label: 'Incapacidad', color: 'bg-orange-100 text-orange-700 border-orange-200 hover:bg-orange-200' },
+const STATUSES: { value: AttendanceStatus; label: string; color: string; activeColor: string }[] = [
+    { value: 'presente', label: 'Presente', color: 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100 dark:bg-green-950/40 dark:text-green-400 dark:border-green-900', activeColor: 'bg-green-600 text-white border-green-600 hover:bg-green-600' },
+    { value: 'falta', label: 'Falta', color: 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100 dark:bg-red-950/40 dark:text-red-400 dark:border-red-900', activeColor: 'bg-red-600 text-white border-red-600 hover:bg-red-600' },
+    { value: 'retardo', label: 'Retardo', color: 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 dark:bg-purple-950/40 dark:text-purple-400 dark:border-purple-900', activeColor: 'bg-purple-600 text-white border-purple-600 hover:bg-purple-600' },
+    { value: 'descanso', label: 'Descanso', color: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-900', activeColor: 'bg-blue-600 text-white border-blue-600 hover:bg-blue-600' },
+    { value: 'permiso', label: 'Permiso', color: 'bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100 dark:bg-yellow-950/40 dark:text-yellow-400 dark:border-yellow-900', activeColor: 'bg-yellow-600 text-white border-yellow-600 hover:bg-yellow-600' },
+    { value: 'incapacidad', label: 'Incapacidad', color: 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 dark:bg-orange-950/40 dark:text-orange-400 dark:border-orange-900', activeColor: 'bg-orange-600 text-white border-orange-600 hover:bg-orange-600' },
 ];
 
 interface RecordEntry {
@@ -56,7 +54,9 @@ const records = ref<RecordEntry[]>(
 );
 
 const applyToAll = (status: AttendanceStatus) => {
-    records.value.forEach((r) => { r.status = status; });
+    records.value.forEach((r) => {
+ r.status = status; 
+});
 };
 
 const form = useForm({
@@ -101,28 +101,25 @@ const newCount = computed(() => records.value.filter((r) => !isAlreadySaved(r.em
 
         <!-- Filtros -->
         <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 bg-muted/30 p-4 rounded-lg border">
-            <div>
-                <Label>Empresa *</Label>
+            <FormField label="Empresa" required>
                 <Select v-model="selectedClient" @update:model-value="selectedSP = ''; loadEmployees()">
-                    <SelectTrigger class="mt-1"><SelectValue placeholder="Selecciona empresa..." /></SelectTrigger>
+                    <SelectTrigger class="w-full"><SelectValue placeholder="Selecciona empresa..." /></SelectTrigger>
                     <SelectContent>
                         <SelectItem v-for="c in clients" :key="c.id" :value="String(c.id)">{{ c.name }}</SelectItem>
                     </SelectContent>
                 </Select>
-            </div>
-            <div>
-                <Label>Punto de Servicio *</Label>
+            </FormField>
+            <FormField label="Punto de Servicio" required>
                 <Select v-model="selectedSP" :disabled="!servicePoints.length" @update:model-value="loadEmployees()">
-                    <SelectTrigger class="mt-1"><SelectValue placeholder="Selecciona punto..." /></SelectTrigger>
+                    <SelectTrigger class="w-full"><SelectValue placeholder="Selecciona punto..." /></SelectTrigger>
                     <SelectContent>
                         <SelectItem v-for="sp in servicePoints" :key="sp.id" :value="String(sp.id)">{{ sp.name }}</SelectItem>
                     </SelectContent>
                 </Select>
-            </div>
-            <div>
-                <Label>Fecha *</Label>
-                <Input type="date" v-model="selectedDate" :max="today" class="mt-1" @change="loadEmployees()" />
-            </div>
+            </FormField>
+            <FormField label="Fecha" required>
+                <DatePicker v-model="selectedDate" :max-value="today" @update:model-value="loadEmployees()" />
+            </FormField>
             <div class="flex items-end">
                 <Button variant="outline" class="w-full" @click="loadEmployees">
                     <ClipboardList class="h-4 w-4 mr-2" /> Cargar
@@ -131,22 +128,22 @@ const newCount = computed(() => records.value.filter((r) => !isAlreadySaved(r.em
         </div>
 
         <!-- Already saved warning -->
-        <Alert v-if="alreadySaved" class="mb-4 bg-amber-50 border-amber-200">
+        <Alert v-if="alreadySaved" class="mb-4 bg-amber-50 border-amber-200 dark:bg-amber-950/40 dark:border-amber-900">
             <CheckCircle2 class="h-4 w-4 text-amber-600" />
-            <AlertDescription class="text-amber-700">
+            <AlertDescription class="text-amber-700 dark:text-amber-400">
                 Ya registraste asistencias para esta fecha y punto de servicio. Solo el administrador puede hacer correcciones.
             </AlertDescription>
         </Alert>
 
         <!-- Quick action -->
-        <div v-if="employees.length && !alreadySaved" class="flex gap-2 mb-4 flex-wrap">
-            <span class="text-sm text-muted-foreground self-center mr-2">Aplicar a todos:</span>
+        <div v-if="employees.length && !alreadySaved" class="flex gap-2 mb-4 flex-wrap items-center">
+            <span class="text-sm text-muted-foreground mr-2">Aplicar a todos:</span>
             <button
                 v-for="s in STATUSES"
                 :key="s.value"
                 type="button"
                 @click="applyToAll(s.value)"
-                :class="['px-3 py-1 text-xs font-medium rounded-full border transition-colors', s.color]"
+                :class="['px-3 py-1.5 text-xs font-medium rounded-full border transition-colors', s.color]"
             >
                 {{ s.label }}
             </button>
@@ -157,41 +154,40 @@ const newCount = computed(() => records.value.filter((r) => !isAlreadySaved(r.em
             <div
                 v-for="(record, i) in records"
                 :key="record.employee_id"
-                class="bg-card border rounded-lg p-4"
+                class="bg-card border rounded-lg p-4 shadow-sm"
                 :class="{ 'opacity-70': isAlreadySaved(record.employee_id) }"
             >
-                <div class="flex items-start gap-4">
-                    <div class="flex-1 min-w-0">
-                        <div class="flex items-center gap-2 mb-3">
-                            <span class="font-medium">{{ employees[i]?.name }} {{ employees[i]?.last_name }}</span>
-                            <span class="text-xs text-muted-foreground font-mono">{{ employees[i]?.employee_number }}</span>
-                            <StatusBadge v-if="isAlreadySaved(record.employee_id)" :status="savedStatus(record.employee_id)!" />
-                        </div>
-                        <div v-if="!isAlreadySaved(record.employee_id)" class="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            <div class="col-span-2 md:col-span-1">
-                                <Label class="text-xs">Estado *</Label>
-                                <Select v-model="record.status">
-                                    <SelectTrigger class="mt-1 h-8 text-sm"><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem v-for="s in STATUSES" :key="s.value" :value="s.value">{{ s.label }}</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div>
-                                <Label class="text-xs">Entrada</Label>
-                                <Input type="time" v-model="record.entry_time" class="mt-1 h-8 text-sm" />
-                            </div>
-                            <div>
-                                <Label class="text-xs">Salida</Label>
-                                <Input type="time" v-model="record.exit_time" class="mt-1 h-8 text-sm" />
-                            </div>
-                            <div>
-                                <Label class="text-xs">Notas</Label>
-                                <Input v-model="record.notes" placeholder="Opcional..." class="mt-1 h-8 text-sm" />
-                            </div>
-                        </div>
-                        <div v-else class="text-sm text-muted-foreground">Ya registrado como: <StatusBadge :status="savedStatus(record.employee_id)!" /></div>
+                <div class="flex items-center gap-2 mb-3">
+                    <span class="font-medium">{{ employees[i]?.name }} {{ employees[i]?.last_name }}</span>
+                    <span class="text-xs text-muted-foreground font-mono">{{ employees[i]?.employee_number }}</span>
+                    <StatusBadge v-if="isAlreadySaved(record.employee_id)" :status="savedStatus(record.employee_id)!" />
+                </div>
+                <template v-if="!isAlreadySaved(record.employee_id)">
+                    <div class="flex gap-1.5 flex-wrap mb-3">
+                        <button
+                            v-for="s in STATUSES"
+                            :key="s.value"
+                            type="button"
+                            @click="record.status = s.value"
+                            :class="['px-2.5 py-1 text-xs font-medium rounded-full border transition-colors', record.status === s.value ? s.activeColor : s.color]"
+                        >
+                            {{ s.label }}
+                        </button>
                     </div>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        <FormField label="Entrada" class="text-xs">
+                            <Input type="time" v-model="record.entry_time" class="h-8 text-sm" />
+                        </FormField>
+                        <FormField label="Salida" class="text-xs">
+                            <Input type="time" v-model="record.exit_time" class="h-8 text-sm" />
+                        </FormField>
+                        <FormField label="Notas" class="text-xs col-span-2 md:col-span-1">
+                            <Input v-model="record.notes" placeholder="Opcional..." class="h-8 text-sm" />
+                        </FormField>
+                    </div>
+                </template>
+                <div v-else class="text-sm text-muted-foreground">
+                    Ya registrado como: <StatusBadge :status="savedStatus(record.employee_id)!" />
                 </div>
             </div>
         </div>

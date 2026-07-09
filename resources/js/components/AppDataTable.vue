@@ -1,11 +1,18 @@
 <script setup lang="ts" generic="TData, TValue">
-import { ref } from 'vue';
+import type { LucideIcon } from '@lucide/vue';
+import { ChevronLeft, ChevronRight, Search } from '@lucide/vue';
 import {
-    type ColumnDef,
+    
     FlexRender,
     getCoreRowModel,
-    useVueTable,
+    useVueTable
 } from '@tanstack/vue-table';
+import type {ColumnDef} from '@tanstack/vue-table';
+import { ref, useSlots } from 'vue';
+import EmptyState from '@/components/EmptyState.vue';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
     Table,
     TableBody,
@@ -14,11 +21,6 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { ChevronLeft, ChevronRight, Search } from '@lucide/vue';
-import EmptyState from '@/components/EmptyState.vue';
-import { Skeleton } from '@/components/ui/skeleton';
 
 const props = withDefaults(defineProps<{
     columns: ColumnDef<TData, TValue>[];
@@ -26,6 +28,10 @@ const props = withDefaults(defineProps<{
     loading?: boolean;
     searchable?: boolean;
     searchPlaceholder?: string;
+    emptyTitle?: string;
+    emptyDescription?: string;
+    emptyIcon?: LucideIcon;
+    actionsLabel?: string;
     pagination?: {
         current_page: number;
         last_page: number;
@@ -38,6 +44,10 @@ const props = withDefaults(defineProps<{
     loading: false,
     searchable: true,
     searchPlaceholder: 'Buscar...',
+    emptyTitle: undefined,
+    emptyDescription: undefined,
+    emptyIcon: undefined,
+    actionsLabel: '',
 });
 
 const emit = defineEmits<{
@@ -45,12 +55,18 @@ const emit = defineEmits<{
     search: [query: string];
 }>();
 
+const slots = useSlots();
+
 const searchQuery = ref('');
 let searchTimeout: ReturnType<typeof setTimeout>;
 
 const table = useVueTable({
-    get data() { return props.data; },
-    get columns() { return props.columns; },
+    get data() {
+ return props.data; 
+},
+    get columns() {
+ return props.columns; 
+},
     getCoreRowModel: getCoreRowModel(),
     manualPagination: true,
     manualFiltering: true,
@@ -61,6 +77,8 @@ const onSearch = (value: string) => {
     clearTimeout(searchTimeout);
     searchTimeout = setTimeout(() => emit('search', value), 400);
 };
+
+const totalColumns = () => props.columns.length + (slots.actions ? 1 : 0);
 </script>
 
 <template>
@@ -93,12 +111,15 @@ const onSearch = (value: string) => {
                                 :props="header.getContext()"
                             />
                         </TableHead>
+                        <TableHead v-if="$slots.actions" class="w-px text-right text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                            {{ actionsLabel }}
+                        </TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                     <template v-if="loading">
                         <TableRow v-for="i in 8" :key="i">
-                            <TableCell v-for="(col, ci) in columns" :key="ci" class="py-3">
+                            <TableCell v-for="ci in totalColumns()" :key="ci" class="py-3">
                                 <Skeleton class="h-4 w-full" />
                             </TableCell>
                         </TableRow>
@@ -110,13 +131,19 @@ const onSearch = (value: string) => {
                             class="hover:bg-muted/40 transition-colors"
                         >
                             <TableCell v-for="cell in row.getVisibleCells()" :key="cell.id" class="py-3">
-                                <FlexRender :render="cell.column.columnDef.cell" :props="cell.getContext()" />
+                                <slot v-if="$slots[`cell-${cell.column.id}`]" :name="`cell-${cell.column.id}`" :item="row.original" :value="cell.getValue()" />
+                                <FlexRender v-else :render="cell.column.columnDef.cell" :props="cell.getContext()" />
+                            </TableCell>
+                            <TableCell v-if="$slots.actions" class="py-3">
+                                <div class="flex items-center justify-end gap-1">
+                                    <slot name="actions" :item="row.original" />
+                                </div>
                             </TableCell>
                         </TableRow>
                     </template>
                     <TableRow v-else>
-                        <TableCell :colspan="columns.length" class="h-48 p-0">
-                            <EmptyState />
+                        <TableCell :colspan="totalColumns()" class="h-48 p-0">
+                            <EmptyState :title="emptyTitle" :description="emptyDescription" :icon="emptyIcon" />
                         </TableCell>
                     </TableRow>
                 </TableBody>

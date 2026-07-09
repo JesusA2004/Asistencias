@@ -1,18 +1,37 @@
 <script setup lang="ts">
-import { AlertCircle, CheckCircle2, ClipboardList, MapPin, XCircle } from '@lucide/vue';
 import { Link } from '@inertiajs/vue3';
+import { AlertCircle, CheckCircle2, ClipboardList, MapPin, XCircle } from '@lucide/vue';
+import { computed } from 'vue';
+import AppChart from '@/components/AppChart.vue';
 import KPICard from '@/components/KPICard.vue';
+import StatusBadge from '@/components/StatusBadge.vue';
 import { Button } from '@/components/ui/button';
-import type { DashboardSupervisorStats } from '@/types/models';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import type { Attendance, DashboardSupervisorStats } from '@/types/models';
 
-defineProps<{
+const props = defineProps<{
     stats: DashboardSupervisorStats;
+    assigned_locations_list: Array<{ client: string; service_point: string }>;
+    recent_captures: Array<Attendance & { employee?: { name: string; last_name: string }; service_point?: { name: string } }>;
+    chart_7_days: Array<{ date: string; total: number; present: number; absent: number; late: number }>;
 }>();
+
+const chartSeries = computed(() => [
+    { name: 'Presentes', data: props.chart_7_days.map((d) => d.present) },
+    { name: 'Faltas', data: props.chart_7_days.map((d) => d.absent) },
+    { name: 'Retardos', data: props.chart_7_days.map((d) => d.late) },
+]);
+
+const chartOptions = computed(() => ({
+    colors: ['#22c55e', '#ef4444', '#a855f7'],
+    xaxis: { categories: props.chart_7_days.map((d) => d.date) },
+    legend: { position: 'top' as const },
+}));
 </script>
 
 <template>
     <div class="p-6 space-y-6">
-        <div class="flex items-center justify-between">
+        <div class="flex items-center justify-between flex-wrap gap-3">
             <div>
                 <h1 class="text-2xl font-bold">Mi Panel de Supervisor</h1>
                 <p class="text-sm text-muted-foreground mt-1">
@@ -66,5 +85,65 @@ defineProps<{
                 Recuerda: Las asistencias deben capturarse el día correspondiente. Una vez guardadas, solo el administrador puede corregirlas.
             </p>
         </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <Card class="lg:col-span-2 border-0 shadow-sm">
+                <CardHeader>
+                    <CardTitle class="text-base">Asistencia — Últimos 7 días</CardTitle>
+                    <CardDescription>Registros capturados por ti</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <AppChart
+                        v-if="chart_7_days.length"
+                        type="area"
+                        :series="chartSeries"
+                        :options="chartOptions"
+                        :height="260"
+                    />
+                    <div v-else class="flex items-center justify-center h-48 text-muted-foreground text-sm">
+                        Aún no tienes capturas registradas
+                    </div>
+                </CardContent>
+            </Card>
+
+            <Card class="border-0 shadow-sm">
+                <CardHeader>
+                    <CardTitle class="text-base">Mis Ubicaciones</CardTitle>
+                    <CardDescription>Empresas y puntos asignados</CardDescription>
+                </CardHeader>
+                <CardContent class="space-y-2">
+                    <div v-if="!assigned_locations_list.length" class="text-sm text-muted-foreground text-center py-8">Sin asignaciones todavía</div>
+                    <div v-for="(loc, i) in assigned_locations_list" :key="i" class="flex items-center gap-2 py-1.5 border-b last:border-0 text-sm">
+                        <MapPin class="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <div class="min-w-0">
+                            <p class="font-medium truncate">{{ loc.client }}</p>
+                            <p class="text-xs text-muted-foreground truncate">{{ loc.service_point }}</p>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
+
+        <Card class="border-0 shadow-sm">
+            <CardHeader>
+                <CardTitle class="text-base">Historial de Capturas Recientes</CardTitle>
+            </CardHeader>
+            <CardContent>
+                <div v-if="!recent_captures.length" class="text-sm text-muted-foreground text-center py-8">Aún no has capturado asistencias</div>
+                <div class="space-y-2">
+                    <div
+                        v-for="c in recent_captures"
+                        :key="c.id"
+                        class="flex items-center justify-between py-2 border-b last:border-0"
+                    >
+                        <div class="min-w-0">
+                            <p class="text-sm font-medium truncate">{{ c.employee?.name }} {{ c.employee?.last_name }}</p>
+                            <p class="text-xs text-muted-foreground truncate">{{ c.service_point?.name }} — {{ c.attendance_date }}</p>
+                        </div>
+                        <StatusBadge :status="c.status" />
+                    </div>
+                </div>
+            </CardContent>
+        </Card>
     </div>
 </template>

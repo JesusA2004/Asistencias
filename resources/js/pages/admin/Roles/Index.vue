@@ -1,18 +1,17 @@
 <script setup lang="ts">
-import { ref } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
 import { Pencil, Plus, Shield, Trash2 } from '@lucide/vue';
+import { computed, ref } from 'vue';
 import DeleteDialog from '@/components/DeleteDialog.vue';
 import EmptyState from '@/components/EmptyState.vue';
+import FormActions from '@/components/FormActions.vue';
+import FormDialogContent from '@/components/FormDialogContent.vue';
+import FormInput from '@/components/FormInput.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-    Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Dialog, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import { usePermissions } from '@/composables/usePermissions';
 import type { Permission, Role } from '@/types/models';
@@ -32,21 +31,42 @@ const form = useForm({
     permissions: [] as string[],
 });
 
-const groupedPermissions = () => {
+const groupedPermissions = computed(() => {
     const groups: Record<string, Permission[]> = {};
+
     for (const p of props.permissions) {
         const parts = p.name.split(' ');
         const entity = parts.length > 1 ? parts.slice(1).join(' ') : 'General';
-        if (!groups[entity]) groups[entity] = [];
+
+        if (!groups[entity]) {
+groups[entity] = [];
+}
+
         groups[entity].push(p);
     }
+
     return groups;
-};
+});
 
 const togglePermission = (name: string) => {
     const idx = form.permissions.indexOf(name);
-    if (idx >= 0) form.permissions.splice(idx, 1);
-    else form.permissions.push(name);
+
+    if (idx >= 0) {
+form.permissions.splice(idx, 1);
+} else {
+form.permissions.push(name);
+}
+};
+
+const isGroupFullySelected = (perms: Permission[]) => perms.every((p) => form.permissions.includes(p.name));
+
+const toggleGroup = (perms: Permission[]) => {
+    if (isGroupFullySelected(perms)) {
+        form.permissions = form.permissions.filter((name) => !perms.some((p) => p.name === name));
+    } else {
+        const names = perms.map((p) => p.name);
+        form.permissions = Array.from(new Set([...form.permissions, ...names]));
+    }
 };
 
 const toggleAll = () => {
@@ -60,11 +80,13 @@ const toggleAll = () => {
 const openCreate = () => {
     editingRole.value = null;
     form.reset();
+    form.clearErrors();
     showModal.value = true;
 };
 
 const openEdit = (role: Role) => {
     editingRole.value = role;
+    form.clearErrors();
     form.name = role.name;
     form.permissions = (role.permissions ?? []).map((p) => p.name);
     showModal.value = true;
@@ -73,18 +95,27 @@ const openEdit = (role: Role) => {
 const submit = () => {
     if (editingRole.value) {
         form.put(`/roles/${editingRole.value.id}`, {
-            onSuccess: () => { showModal.value = false; },
+            onSuccess: () => {
+ showModal.value = false; 
+},
         });
     } else {
         form.post('/roles', {
-            onSuccess: () => { showModal.value = false; form.reset(); },
+            onSuccess: () => {
+ showModal.value = false; form.reset(); 
+},
         });
     }
 };
 
 const confirmDelete = () => {
-    if (!deleteId.value) return;
-    router.delete(`/roles/${deleteId.value}`, { onFinish: () => { deleteId.value = null; } });
+    if (!deleteId.value) {
+return;
+}
+
+    router.delete(`/roles/${deleteId.value}`, { onFinish: () => {
+ deleteId.value = null; 
+} });
 };
 
 const SYSTEM_ROLES = ['administrador', 'supervisor', 'colaborador', 'rh'];
@@ -143,35 +174,48 @@ const SYSTEM_ROLES = ['administrador', 'supervisor', 'colaborador', 'rh'];
                 </div>
             </div>
 
-            <div v-if="!roles.length">
+            <div v-if="!roles.length" class="lg:col-span-4">
                 <EmptyState :icon="Shield" title="Sin roles" />
             </div>
         </div>
 
         <!-- Modal -->
         <Dialog :open="showModal" @update:open="showModal = $event">
-            <DialogContent class="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <FormDialogContent class="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>{{ editingRole ? `Editar rol: ${editingRole.name}` : 'Nuevo Rol' }}</DialogTitle>
                 </DialogHeader>
                 <form @submit.prevent="submit" class="space-y-4">
-                    <div>
-                        <Label>Nombre del rol *</Label>
-                        <Input v-model="form.name" :disabled="editingRole && SYSTEM_ROLES.includes(editingRole.name)" placeholder="Ej. coordinador" class="mt-1" />
-                        <p v-if="form.errors.name" class="text-destructive text-xs mt-1">{{ form.errors.name }}</p>
-                    </div>
+                    <FormInput
+                        v-model="form.name"
+                        label="Nombre del rol"
+                        required
+                        :disabled="!!(editingRole && SYSTEM_ROLES.includes(editingRole.name))"
+                        placeholder="Ej. coordinador"
+                        :error="form.errors.name"
+                        :hint="editingRole && SYSTEM_ROLES.includes(editingRole.name) ? 'Los roles del sistema no pueden renombrarse.' : undefined"
+                    />
 
                     <div>
                         <div class="flex items-center justify-between mb-2">
-                            <Label>Permisos</Label>
+                            <span class="text-sm font-medium">Permisos</span>
                             <Button type="button" variant="ghost" size="sm" @click="toggleAll">
                                 {{ form.permissions.length === permissions.length ? 'Desmarcar todos' : 'Marcar todos' }}
                             </Button>
                         </div>
-                        <div class="space-y-3 border rounded-lg p-3 bg-muted/20">
-                            <div v-for="(perms, group) in groupedPermissions()" :key="group">
-                                <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">{{ group }}</p>
-                                <div class="grid grid-cols-2 gap-1">
+                        <div class="space-y-4 border rounded-lg p-3 bg-muted/20 max-h-96 overflow-y-auto">
+                            <div v-for="(perms, group) in groupedPermissions" :key="group">
+                                <div class="flex items-center justify-between mb-1.5">
+                                    <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{{ group }}</p>
+                                    <button
+                                        type="button"
+                                        class="text-xs text-primary hover:underline"
+                                        @click="toggleGroup(perms)"
+                                    >
+                                        {{ isGroupFullySelected(perms) ? 'Ninguno' : 'Todos' }}
+                                    </button>
+                                </div>
+                                <div class="grid grid-cols-2 gap-1.5">
                                     <label
                                         v-for="perm in perms"
                                         :key="perm.id"
@@ -184,16 +228,14 @@ const SYSTEM_ROLES = ['administrador', 'supervisor', 'colaborador', 'rh'];
                                         <span class="text-xs">{{ perm.name }}</span>
                                     </label>
                                 </div>
+                                <Separator class="mt-3" />
                             </div>
                         </div>
                     </div>
 
-                    <DialogFooter>
-                        <Button type="button" variant="outline" @click="showModal = false">Cancelar</Button>
-                        <Button type="submit" :disabled="form.processing">{{ form.processing ? 'Guardando...' : 'Guardar' }}</Button>
-                    </DialogFooter>
+                    <FormActions :processing="form.processing" @cancel="showModal = false" />
                 </form>
-            </DialogContent>
+            </FormDialogContent>
         </Dialog>
 
         <DeleteDialog

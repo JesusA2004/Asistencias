@@ -1,16 +1,17 @@
 <script setup lang="ts">
-import { ref } from 'vue';
 import { router } from '@inertiajs/vue3';
-import { History } from '@lucide/vue';
-import EmptyState from '@/components/EmptyState.vue';
+import { Eye, History } from '@lucide/vue';
+import type {ColumnDef} from '@tanstack/vue-table';
+import { ref } from 'vue';
+import AppDataTable from '@/components/AppDataTable.vue';
+import DatePicker from '@/components/DatePicker.vue';
+import FormField from '@/components/FormField.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-    Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import type { AttendanceAudit, PaginatedData } from '@/types/models';
 
 const props = defineProps<{
@@ -33,11 +34,47 @@ const applyFilters = () => {
 const onPage = (p: number) => router.get('/auditoria', { ...props.filters, page: p }, { preserveState: true });
 
 const actionColors: Record<string, string> = {
-    creado: 'bg-green-100 text-green-700 border-green-200',
-    actualizado: 'bg-blue-100 text-blue-700 border-blue-200',
-    corregido: 'bg-yellow-100 text-yellow-700 border-yellow-200',
-    eliminado: 'bg-red-100 text-red-700 border-red-200',
+    creado: 'bg-green-100 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-400',
+    actualizado: 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-400',
+    corregido: 'bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-950 dark:text-yellow-400',
+    eliminado: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-400',
 };
+
+const viewingAudit = ref<AttendanceAudit | null>(null);
+const showDetails = ref(false);
+
+const openDetails = (audit: AttendanceAudit) => {
+    viewingAudit.value = audit;
+    showDetails.value = true;
+};
+
+const FIELD_LABELS: Record<string, string> = {
+    status: 'Estado',
+    entry_time: 'Entrada',
+    exit_time: 'Salida',
+    notes: 'Notas',
+    attendance_date: 'Fecha',
+};
+
+const diffKeys = (audit: AttendanceAudit | null) => {
+    if (!audit) {
+return [];
+}
+
+    const old = (audit.old_values ?? {}) as Record<string, unknown>;
+    const fresh = (audit.new_values ?? {}) as Record<string, unknown>;
+
+    return Array.from(new Set([...Object.keys(old), ...Object.keys(fresh)]));
+};
+
+const columns: ColumnDef<AttendanceAudit>[] = [
+    { accessorKey: 'created_at', header: 'Fecha/Hora' },
+    { accessorKey: 'action', header: 'Acción' },
+    { accessorKey: 'employee', header: 'Colaborador' },
+    { accessorKey: 'client', header: 'Empresa', cell: ({ row }) => row.original.attendance?.client?.name ?? '—' },
+    { accessorKey: 'changer', header: 'Realizó', cell: ({ row }) => row.original.changer?.name ?? '—' },
+    { accessorKey: 'reason', header: 'Motivo', cell: ({ getValue }) => getValue() || '—' },
+];
 </script>
 
 <template>
@@ -46,10 +83,9 @@ const actionColors: Record<string, string> = {
 
         <!-- Filters -->
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6 bg-muted/30 p-4 rounded-lg border">
-            <div>
-                <Label class="text-xs">Acción</Label>
-                <Select :model-value="filterAction || '__all__'" @update:model-value="(v) => { filterAction = v === '__all__' ? '' : (v as string); applyFilters(); }">
-                    <SelectTrigger class="mt-1 h-8 text-sm"><SelectValue placeholder="Todas" /></SelectTrigger>
+            <FormField label="Acción">
+                <Select :model-value="filterAction || '__all__'" @update:model-value="(v) => { filterAction = v === '__all__' ? '' : String(v); applyFilters(); }">
+                    <SelectTrigger class="w-full"><SelectValue placeholder="Todas" /></SelectTrigger>
                     <SelectContent>
                         <SelectItem value="__all__">Todas</SelectItem>
                         <SelectItem value="creado">Creado</SelectItem>
@@ -58,80 +94,85 @@ const actionColors: Record<string, string> = {
                         <SelectItem value="eliminado">Eliminado</SelectItem>
                     </SelectContent>
                 </Select>
-            </div>
-            <div>
-                <Label class="text-xs">Desde</Label>
-                <Input type="date" v-model="filterFrom" class="mt-1 h-8 text-sm" @change="applyFilters" />
-            </div>
-            <div>
-                <Label class="text-xs">Hasta</Label>
-                <Input type="date" v-model="filterTo" class="mt-1 h-8 text-sm" @change="applyFilters" />
-            </div>
+            </FormField>
+            <FormField label="Desde">
+                <DatePicker v-model="filterFrom" placeholder="Todas las fechas" @update:model-value="applyFilters" />
+            </FormField>
+            <FormField label="Hasta">
+                <DatePicker v-model="filterTo" placeholder="Todas las fechas" @update:model-value="applyFilters" />
+            </FormField>
             <div class="flex items-end">
                 <Button variant="outline" size="sm" class="w-full" @click="applyFilters">Filtrar</Button>
             </div>
         </div>
 
-        <!-- Table -->
-        <div class="rounded-lg border bg-card overflow-hidden">
-            <table class="w-full text-sm">
-                <thead class="bg-muted/30">
-                    <tr>
-                        <th class="text-left p-3 text-xs uppercase tracking-wider text-muted-foreground font-semibold">Fecha/Hora</th>
-                        <th class="text-left p-3 text-xs uppercase tracking-wider text-muted-foreground font-semibold">Acción</th>
-                        <th class="text-left p-3 text-xs uppercase tracking-wider text-muted-foreground font-semibold">Colaborador</th>
-                        <th class="text-left p-3 text-xs uppercase tracking-wider text-muted-foreground font-semibold">Empresa</th>
-                        <th class="text-left p-3 text-xs uppercase tracking-wider text-muted-foreground font-semibold">Realizó</th>
-                        <th class="text-left p-3 text-xs uppercase tracking-wider text-muted-foreground font-semibold">Motivo</th>
-                        <th class="text-left p-3 text-xs uppercase tracking-wider text-muted-foreground font-semibold">Cambios</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr v-if="!audits.data.length">
-                        <td colspan="7"><EmptyState :icon="History" title="Sin registros de auditoría" description="No hay cambios registrados para los filtros aplicados." /></td>
-                    </tr>
-                    <tr
-                        v-for="audit in audits.data"
-                        :key="audit.id"
-                        class="border-t hover:bg-muted/40 transition-colors"
-                    >
-                        <td class="p-3 font-mono text-xs whitespace-nowrap">{{ audit.created_at }}</td>
-                        <td class="p-3">
-                            <Badge variant="outline" :class="['text-xs', actionColors[audit.action] ?? '']">
-                                {{ audit.action }}
-                            </Badge>
-                        </td>
-                        <td class="p-3 text-sm">
-                            <div>{{ audit.attendance?.employee?.name }} {{ audit.attendance?.employee?.last_name }}</div>
-                            <div class="text-xs text-muted-foreground font-mono">{{ audit.attendance?.employee?.employee_number }}</div>
-                        </td>
-                        <td class="p-3 text-sm">{{ audit.attendance?.client?.name ?? '—' }}</td>
-                        <td class="p-3 text-sm">{{ audit.changer?.name ?? '—' }}</td>
-                        <td class="p-3 text-xs text-muted-foreground max-w-[200px] truncate" :title="audit.reason ?? ''">
-                            {{ audit.reason ?? '—' }}
-                        </td>
-                        <td class="p-3">
-                            <div v-if="audit.old_values || audit.new_values" class="text-xs">
-                                <div v-if="audit.old_values" class="text-red-600">
-                                    Antes: {{ JSON.stringify(audit.old_values) }}
-                                </div>
-                                <div v-if="audit.new_values" class="text-green-600">
-                                    Después: {{ JSON.stringify(audit.new_values) }}
-                                </div>
-                            </div>
-                            <span v-else class="text-xs text-muted-foreground">—</span>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
+        <AppDataTable
+            :columns="columns"
+            :data="audits.data"
+            :pagination="audits"
+            :searchable="false"
+            empty-title="Sin registros de auditoría"
+            empty-description="No hay cambios registrados para los filtros aplicados."
+            :empty-icon="History"
+            @page-change="onPage"
+        >
+            <template #cell-created_at="{ value }">
+                <span class="font-mono text-xs whitespace-nowrap">{{ value }}</span>
+            </template>
+            <template #cell-action="{ item }">
+                <Badge variant="outline" :class="['text-xs', actionColors[item.action] ?? '']">
+                    {{ item.action }}
+                </Badge>
+            </template>
+            <template #cell-employee="{ item }">
+                <div class="text-sm">{{ item.attendance?.employee?.name }} {{ item.attendance?.employee?.last_name }}</div>
+                <div class="text-xs text-muted-foreground font-mono">{{ item.attendance?.employee?.employee_number }}</div>
+            </template>
+            <template #actions="{ item }">
+                <Button
+                    v-if="item.old_values || item.new_values"
+                    variant="ghost"
+                    size="sm"
+                    @click="openDetails(item)"
+                >
+                    <Eye class="h-4 w-4 mr-1.5" /> Ver cambios
+                </Button>
+            </template>
+        </AppDataTable>
 
-        <div v-if="audits.last_page > 1" class="flex justify-between items-center mt-4 text-sm">
-            <span class="text-muted-foreground">{{ audits.from }}–{{ audits.to }} de {{ audits.total }}</span>
-            <div class="flex gap-1">
-                <Button variant="outline" size="sm" :disabled="audits.current_page <= 1" @click="onPage(audits.current_page - 1)">Ant</Button>
-                <Button variant="outline" size="sm" :disabled="audits.current_page >= audits.last_page" @click="onPage(audits.current_page + 1)">Sig</Button>
-            </div>
-        </div>
+        <Sheet :open="showDetails" @update:open="showDetails = $event">
+            <SheetContent class="sm:max-w-md">
+                <SheetHeader>
+                    <SheetTitle>Detalle de auditoría</SheetTitle>
+                    <SheetDescription>
+                        {{ viewingAudit?.attendance?.employee?.name }} {{ viewingAudit?.attendance?.employee?.last_name }} — {{ viewingAudit?.created_at }}
+                    </SheetDescription>
+                </SheetHeader>
+                <div class="px-4 pb-4 space-y-4">
+                    <div v-if="viewingAudit?.reason">
+                        <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Motivo</p>
+                        <p class="text-sm">{{ viewingAudit.reason }}</p>
+                    </div>
+                    <Separator v-if="viewingAudit?.reason" />
+                    <div class="space-y-3">
+                        <div v-for="key in diffKeys(viewingAudit)" :key="key" class="text-sm">
+                            <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                                {{ FIELD_LABELS[key] ?? key }}
+                            </p>
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <Badge v-if="(viewingAudit?.old_values as Record<string, unknown>)?.[key] !== undefined" variant="outline" class="text-red-600 border-red-200 dark:text-red-400">
+                                    {{ (viewingAudit?.old_values as Record<string, unknown>)?.[key] ?? '—' }}
+                                </Badge>
+                                <span v-if="(viewingAudit?.old_values as Record<string, unknown>)?.[key] !== undefined && (viewingAudit?.new_values as Record<string, unknown>)?.[key] !== undefined" class="text-muted-foreground text-xs">→</span>
+                                <Badge v-if="(viewingAudit?.new_values as Record<string, unknown>)?.[key] !== undefined" variant="outline" class="text-green-600 border-green-200 dark:text-green-400">
+                                    {{ (viewingAudit?.new_values as Record<string, unknown>)?.[key] ?? '—' }}
+                                </Badge>
+                            </div>
+                        </div>
+                        <p v-if="!diffKeys(viewingAudit).length" class="text-sm text-muted-foreground">Sin cambios registrados.</p>
+                    </div>
+                </div>
+            </SheetContent>
+        </Sheet>
     </div>
 </template>

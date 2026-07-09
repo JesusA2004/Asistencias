@@ -1,20 +1,19 @@
 <script setup lang="ts">
-import { ref } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
 import { Pencil, Plus, Trash2, Users } from '@lucide/vue';
+import type {ColumnDef} from '@tanstack/vue-table';
+import { ref } from 'vue';
+import AppDataTable from '@/components/AppDataTable.vue';
 import DeleteDialog from '@/components/DeleteDialog.vue';
-import EmptyState from '@/components/EmptyState.vue';
+import FormActions from '@/components/FormActions.vue';
+import FormDialogContent from '@/components/FormDialogContent.vue';
+import FormInput from '@/components/FormInput.vue';
+import FormSelect from '@/components/FormSelect.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-    Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-    Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
+import { Dialog, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { SelectItem } from '@/components/ui/select';
 import { usePermissions } from '@/composables/usePermissions';
 import type { AppUser, PaginatedData, Role } from '@/types/models';
 
@@ -26,7 +25,7 @@ const props = defineProps<{
     filters: Record<string, string | undefined>;
 }>();
 
-const { hasPermission } = usePermissions();
+const { hasPermission, user: currentUser } = usePermissions();
 const showModal = ref(false);
 const deleteId = ref<number | null>(null);
 const editingUser = ref<UserWithRoles | null>(null);
@@ -42,11 +41,13 @@ const form = useForm({
 const openCreate = () => {
     editingUser.value = null;
     form.reset();
+    form.clearErrors();
     showModal.value = true;
 };
 
 const openEdit = (user: UserWithRoles) => {
     editingUser.value = user;
+    form.clearErrors();
     form.name = user.name;
     form.email = user.email;
     form.password = '';
@@ -58,26 +59,45 @@ const openEdit = (user: UserWithRoles) => {
 const submit = () => {
     if (editingUser.value) {
         form.put(`/usuarios/${editingUser.value.id}`, {
-            onSuccess: () => { showModal.value = false; },
+            onSuccess: () => {
+ showModal.value = false; 
+},
         });
     } else {
         form.post('/usuarios', {
-            onSuccess: () => { showModal.value = false; form.reset(); },
+            onSuccess: () => {
+ showModal.value = false; form.reset(); 
+},
         });
     }
 };
 
 const confirmDelete = () => {
-    if (!deleteId.value) return;
-    router.delete(`/usuarios/${deleteId.value}`, { onFinish: () => { deleteId.value = null; } });
+    if (!deleteId.value) {
+return;
+}
+
+    router.delete(`/usuarios/${deleteId.value}`, { onFinish: () => {
+ deleteId.value = null; 
+} });
 };
 
+const onSearch = (q: string) => router.get('/usuarios', { ...props.filters, search: q }, { preserveState: true, replace: true });
+const onPage = (p: number) => router.get('/usuarios', { ...props.filters, page: p }, { preserveState: true });
+
 const roleColors: Record<string, string> = {
-    administrador: 'bg-red-100 text-red-700 border-red-200',
-    supervisor: 'bg-blue-100 text-blue-700 border-blue-200',
-    colaborador: 'bg-green-100 text-green-700 border-green-200',
-    rh: 'bg-purple-100 text-purple-700 border-purple-200',
+    administrador: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-400',
+    supervisor: 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-400',
+    colaborador: 'bg-green-100 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-400',
+    rh: 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-950 dark:text-purple-400',
 };
+
+const columns: ColumnDef<UserWithRoles>[] = [
+    { accessorKey: 'name', header: 'Nombre' },
+    { accessorKey: 'email', header: 'Email' },
+    { accessorKey: 'roles', header: 'Rol' },
+    { accessorKey: 'created_at', header: 'Creado' },
+];
 </script>
 
 <template>
@@ -90,91 +110,68 @@ const roleColors: Record<string, string> = {
             </template>
         </PageHeader>
 
-        <div class="rounded-lg border bg-card overflow-hidden">
-            <table class="w-full text-sm">
-                <thead class="bg-muted/30">
-                    <tr>
-                        <th class="text-left p-3 text-xs uppercase tracking-wider text-muted-foreground font-semibold">Nombre</th>
-                        <th class="text-left p-3 text-xs uppercase tracking-wider text-muted-foreground font-semibold">Email</th>
-                        <th class="text-left p-3 text-xs uppercase tracking-wider text-muted-foreground font-semibold">Rol</th>
-                        <th class="text-left p-3 text-xs uppercase tracking-wider text-muted-foreground font-semibold">Creado</th>
-                        <th class="text-right p-3"></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr v-if="!users.data.length">
-                        <td colspan="5"><EmptyState :icon="Users" title="Sin usuarios" /></td>
-                    </tr>
-                    <tr v-for="user in users.data" :key="user.id" class="border-t hover:bg-muted/40 transition-colors">
-                        <td class="p-3 font-medium">{{ user.name }}</td>
-                        <td class="p-3 text-muted-foreground">{{ user.email }}</td>
-                        <td class="p-3">
-                            <Badge
-                                v-for="role in (user.roles ?? [])"
-                                :key="role"
-                                variant="outline"
-                                :class="['text-xs', roleColors[role] ?? '']"
-                            >
-                                {{ role }}
-                            </Badge>
-                        </td>
-                        <td class="p-3 text-xs text-muted-foreground">{{ user.created_at }}</td>
-                        <td class="p-3">
-                            <div class="flex items-center justify-end gap-1">
-                                <Button v-if="hasPermission('Editar usuarios')" variant="ghost" size="sm" @click="openEdit(user)">
-                                    <Pencil class="h-4 w-4" />
-                                </Button>
-                                <Button v-if="hasPermission('Eliminar usuarios')" variant="ghost" size="sm" class="text-destructive" @click="deleteId = user.id">
-                                    <Trash2 class="h-4 w-4" />
-                                </Button>
-                            </div>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
+        <AppDataTable
+            :columns="columns"
+            :data="users.data"
+            :pagination="users"
+            search-placeholder="Buscar por nombre o email..."
+            empty-title="Sin usuarios"
+            :empty-icon="Users"
+            @search="onSearch"
+            @page-change="onPage"
+        >
+            <template #cell-roles="{ item }">
+                <Badge
+                    v-for="role in (item.roles ?? [])"
+                    :key="role"
+                    variant="outline"
+                    :class="['text-xs', roleColors[role] ?? '']"
+                >
+                    {{ role }}
+                </Badge>
+            </template>
+            <template #cell-created_at="{ value }">
+                <span class="text-xs text-muted-foreground">{{ value }}</span>
+            </template>
+            <template #actions="{ item }">
+                <Button v-if="hasPermission('Editar usuarios')" variant="ghost" size="sm" @click="openEdit(item)">
+                    <Pencil class="h-4 w-4" />
+                </Button>
+                <Button
+                    v-if="hasPermission('Eliminar usuarios') && item.id !== currentUser.id"
+                    variant="ghost"
+                    size="sm"
+                    class="text-destructive"
+                    @click="deleteId = item.id"
+                >
+                    <Trash2 class="h-4 w-4" />
+                </Button>
+            </template>
+        </AppDataTable>
 
         <Dialog :open="showModal" @update:open="showModal = $event">
-            <DialogContent class="max-w-md">
+            <FormDialogContent class="max-w-md">
                 <DialogHeader>
                     <DialogTitle>{{ editingUser ? 'Editar Usuario' : 'Nuevo Usuario' }}</DialogTitle>
                 </DialogHeader>
                 <form @submit.prevent="submit" class="space-y-4">
-                    <div>
-                        <Label>Nombre *</Label>
-                        <Input v-model="form.name" placeholder="Nombre completo" class="mt-1" />
-                        <p v-if="form.errors.name" class="text-destructive text-xs mt-1">{{ form.errors.name }}</p>
-                    </div>
-                    <div>
-                        <Label>Email *</Label>
-                        <Input type="email" v-model="form.email" placeholder="correo@ejemplo.com" class="mt-1" />
-                        <p v-if="form.errors.email" class="text-destructive text-xs mt-1">{{ form.errors.email }}</p>
-                    </div>
-                    <div>
-                        <Label>{{ editingUser ? 'Nueva contraseña (dejar en blanco para no cambiar)' : 'Contraseña *' }}</Label>
-                        <Input type="password" v-model="form.password" placeholder="••••••••" class="mt-1" />
-                        <p v-if="form.errors.password" class="text-destructive text-xs mt-1">{{ form.errors.password }}</p>
-                    </div>
-                    <div>
-                        <Label>Confirmar contraseña</Label>
-                        <Input type="password" v-model="form.password_confirmation" placeholder="••••••••" class="mt-1" />
-                    </div>
-                    <div>
-                        <Label>Rol *</Label>
-                        <Select v-model="form.role">
-                            <SelectTrigger class="mt-1"><SelectValue placeholder="Selecciona rol..." /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem v-for="role in roles" :key="role.id" :value="role.name">{{ role.name }}</SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <p v-if="form.errors.role" class="text-destructive text-xs mt-1">{{ form.errors.role }}</p>
-                    </div>
-                    <DialogFooter>
-                        <Button type="button" variant="outline" @click="showModal = false">Cancelar</Button>
-                        <Button type="submit" :disabled="form.processing">{{ form.processing ? 'Guardando...' : 'Guardar' }}</Button>
-                    </DialogFooter>
+                    <FormInput v-model="form.name" label="Nombre" required placeholder="Nombre completo" :error="form.errors.name" />
+                    <FormInput v-model="form.email" type="email" label="Email" required placeholder="correo@ejemplo.com" :error="form.errors.email" />
+                    <FormInput
+                        v-model="form.password"
+                        type="password"
+                        :label="editingUser ? 'Nueva contraseña (dejar en blanco para no cambiar)' : 'Contraseña'"
+                        :required="!editingUser"
+                        placeholder="••••••••"
+                        :error="form.errors.password"
+                    />
+                    <FormInput v-model="form.password_confirmation" type="password" label="Confirmar contraseña" placeholder="••••••••" />
+                    <FormSelect v-model="form.role" label="Rol" required placeholder="Selecciona rol..." :error="form.errors.role">
+                        <SelectItem v-for="role in roles" :key="role.id" :value="role.name">{{ role.name }}</SelectItem>
+                    </FormSelect>
+                    <FormActions :processing="form.processing" @cancel="showModal = false" />
                 </form>
-            </DialogContent>
+            </FormDialogContent>
         </Dialog>
 
         <DeleteDialog

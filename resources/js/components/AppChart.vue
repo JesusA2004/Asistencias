@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { defineAsyncComponent } from 'vue';
 import type { ApexOptions } from 'apexcharts';
+import { defineAsyncComponent } from 'vue';
 
 const VueApexCharts = defineAsyncComponent(() => import('vue3-apexcharts'));
 
-const props = withDefaults(defineProps<{
+withDefaults(defineProps<{
     type: 'line' | 'bar' | 'area' | 'donut' | 'pie' | 'radialBar';
     series: ApexOptions['series'];
     options?: Partial<ApexOptions>;

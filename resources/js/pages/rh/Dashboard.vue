@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { BarChart3, Building2, CheckCircle2, Users } from '@lucide/vue';
 import { Link } from '@inertiajs/vue3';
+import { BarChart3, Building2, CheckCircle2, Users } from '@lucide/vue';
 import KPICard from '@/components/KPICard.vue';
 import { Button } from '@/components/ui/button';
 

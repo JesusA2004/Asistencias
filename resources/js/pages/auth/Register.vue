@@ -6,7 +6,7 @@ import { login } from '@/routes';
 // El registro público está deshabilitado.
 // Si alguien llega a esta página, se redirige al login.
 onMounted(() => {
-    window.location.href = login();
+    window.location.href = login().url;
 });
 </script>
 

@@ -1,27 +1,28 @@
 <script setup lang="ts">
-import { ref } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
 import { MapPin, Pencil, Plus, Trash2 } from '@lucide/vue';
+import type {ColumnDef} from '@tanstack/vue-table';
+import { ref } from 'vue';
+import AppDataTable from '@/components/AppDataTable.vue';
 import DeleteDialog from '@/components/DeleteDialog.vue';
-import EmptyState from '@/components/EmptyState.vue';
+import FormActions from '@/components/FormActions.vue';
+import FormDialogContent from '@/components/FormDialogContent.vue';
+import FormInput from '@/components/FormInput.vue';
+import FormSelect from '@/components/FormSelect.vue';
+import FormTextarea from '@/components/FormTextarea.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import StatusBadge from '@/components/StatusBadge.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-    Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-    Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { usePermissions } from '@/composables/usePermissions';
 import type { Client, PaginatedData, ServicePoint } from '@/types/models';
 
+type ServicePointRow = ServicePoint & { employees_count: number };
+
 const props = defineProps<{
-    servicePoints: PaginatedData<ServicePoint & { employees_count: number }>;
+    servicePoints: PaginatedData<ServicePointRow>;
     clients: Client[];
     filters: Record<string, string | undefined>;
 }>();
@@ -41,12 +42,14 @@ const form = useForm({
 const openCreate = () => {
     editingSP.value = null;
     form.reset();
+    form.clearErrors();
     form.status = 'activo';
     showModal.value = true;
 };
 
 const openEdit = (sp: ServicePoint) => {
     editingSP.value = sp;
+    form.clearErrors();
     form.client_id = String(sp.client_id);
     form.name = sp.name;
     form.address = sp.address ?? '';
@@ -57,21 +60,40 @@ const openEdit = (sp: ServicePoint) => {
 const submit = () => {
     if (editingSP.value) {
         form.put(`/puntos-servicio/${editingSP.value.id}`, {
-            onSuccess: () => { showModal.value = false; },
+            onSuccess: () => {
+ showModal.value = false; 
+},
         });
     } else {
         form.post('/puntos-servicio', {
-            onSuccess: () => { showModal.value = false; form.reset(); form.status = 'activo'; },
+            onSuccess: () => {
+ showModal.value = false; form.reset(); form.status = 'activo'; 
+},
         });
     }
 };
 
 const confirmDelete = () => {
-    if (!deleteId.value) return;
-    router.delete(`/puntos-servicio/${deleteId.value}`, { onFinish: () => { deleteId.value = null; } });
+    if (!deleteId.value) {
+return;
+}
+
+    router.delete(`/puntos-servicio/${deleteId.value}`, { onFinish: () => {
+ deleteId.value = null; 
+} });
 };
 
+const onSearch = (q: string) => router.get('/puntos-servicio', { ...props.filters, search: q }, { preserveState: true, replace: true });
 const onPage = (p: number) => router.get('/puntos-servicio', { ...props.filters, page: p }, { preserveState: true });
+const onClientFilter = (v: string) => router.get('/puntos-servicio', { ...props.filters, client_id: v === '__all__' ? undefined : v }, { preserveState: true });
+
+const columns: ColumnDef<ServicePointRow>[] = [
+    { accessorKey: 'name', header: 'Nombre' },
+    { accessorKey: 'client', header: 'Empresa', cell: ({ row }) => row.original.client?.name ?? '—' },
+    { accessorKey: 'address', header: 'Dirección', cell: ({ getValue }) => getValue() || '—' },
+    { accessorKey: 'employees_count', header: 'Colaboradores' },
+    { accessorKey: 'status', header: 'Estado' },
+];
 </script>
 
 <template>
@@ -84,101 +106,58 @@ const onPage = (p: number) => router.get('/puntos-servicio', { ...props.filters,
             </template>
         </PageHeader>
 
-        <!-- Client filter -->
-        <div class="mb-4">
-            <Select :model-value="filters.client_id ?? '__all__'" @update:model-value="(v) => router.get('/puntos-servicio', { ...filters, client_id: v === '__all__' ? undefined : v }, { preserveState: true })">
-                <SelectTrigger class="w-64"><SelectValue placeholder="Filtrar por empresa..." /></SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="__all__">Todas las empresas</SelectItem>
-                    <SelectItem v-for="c in clients" :key="c.id" :value="String(c.id)">{{ c.name }}</SelectItem>
-                </SelectContent>
-            </Select>
-        </div>
-
-        <div class="rounded-lg border bg-card overflow-hidden">
-            <table class="w-full text-sm">
-                <thead class="bg-muted/30">
-                    <tr>
-                        <th class="text-left p-3 text-xs uppercase tracking-wider text-muted-foreground font-semibold">Nombre</th>
-                        <th class="text-left p-3 text-xs uppercase tracking-wider text-muted-foreground font-semibold">Empresa</th>
-                        <th class="text-left p-3 text-xs uppercase tracking-wider text-muted-foreground font-semibold">Dirección</th>
-                        <th class="text-center p-3 text-xs uppercase tracking-wider text-muted-foreground font-semibold">Colaboradores</th>
-                        <th class="text-left p-3 text-xs uppercase tracking-wider text-muted-foreground font-semibold">Estado</th>
-                        <th class="text-right p-3"></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr v-if="!servicePoints.data.length">
-                        <td colspan="6"><EmptyState :icon="MapPin" title="Sin puntos de servicio" description="Crea el primer punto de servicio." /></td>
-                    </tr>
-                    <tr v-for="sp in servicePoints.data" :key="sp.id" class="border-t hover:bg-muted/40 transition-colors">
-                        <td class="p-3 font-medium">{{ sp.name }}</td>
-                        <td class="p-3 text-sm">{{ sp.client?.name ?? '—' }}</td>
-                        <td class="p-3 text-sm text-muted-foreground truncate max-w-[200px]">{{ sp.address ?? '—' }}</td>
-                        <td class="p-3 text-center"><Badge variant="secondary">{{ (sp as any).employees_count ?? 0 }}</Badge></td>
-                        <td class="p-3"><StatusBadge :status="sp.status" /></td>
-                        <td class="p-3">
-                            <div class="flex items-center justify-end gap-1">
-                                <Button v-if="hasPermission('Editar puntos de servicio')" variant="ghost" size="sm" @click="openEdit(sp)">
-                                    <Pencil class="h-4 w-4" />
-                                </Button>
-                                <Button v-if="hasPermission('Eliminar puntos de servicio')" variant="ghost" size="sm" class="text-destructive" @click="deleteId = sp.id">
-                                    <Trash2 class="h-4 w-4" />
-                                </Button>
-                            </div>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <div v-if="servicePoints.last_page > 1" class="flex justify-between items-center mt-4 text-sm">
-            <span class="text-muted-foreground">{{ servicePoints.from }}–{{ servicePoints.to }} de {{ servicePoints.total }}</span>
-            <div class="flex gap-1">
-                <Button variant="outline" size="sm" :disabled="servicePoints.current_page <= 1" @click="onPage(servicePoints.current_page - 1)">Anterior</Button>
-                <Button variant="outline" size="sm" :disabled="servicePoints.current_page >= servicePoints.last_page" @click="onPage(servicePoints.current_page + 1)">Siguiente</Button>
-            </div>
-        </div>
+        <AppDataTable
+            :columns="columns"
+            :data="servicePoints.data"
+            :pagination="servicePoints"
+            search-placeholder="Buscar punto de servicio..."
+            empty-title="Sin puntos de servicio"
+            empty-description="Crea el primer punto de servicio."
+            :empty-icon="MapPin"
+            @search="onSearch"
+            @page-change="onPage"
+        >
+            <template #filters>
+                <Select :model-value="filters.client_id ?? '__all__'" @update:model-value="(v) => onClientFilter(String(v))">
+                    <SelectTrigger class="w-56"><SelectValue placeholder="Filtrar por empresa..." /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="__all__">Todas las empresas</SelectItem>
+                        <SelectItem v-for="c in clients" :key="c.id" :value="String(c.id)">{{ c.name }}</SelectItem>
+                    </SelectContent>
+                </Select>
+            </template>
+            <template #cell-employees_count="{ item }">
+                <Badge variant="secondary">{{ item.employees_count ?? 0 }}</Badge>
+            </template>
+            <template #cell-status="{ item }">
+                <StatusBadge :status="item.status" />
+            </template>
+            <template #actions="{ item }">
+                <Button v-if="hasPermission('Editar puntos de servicio')" variant="ghost" size="sm" @click="openEdit(item)">
+                    <Pencil class="h-4 w-4" />
+                </Button>
+                <Button v-if="hasPermission('Eliminar puntos de servicio')" variant="ghost" size="sm" class="text-destructive" @click="deleteId = item.id">
+                    <Trash2 class="h-4 w-4" />
+                </Button>
+            </template>
+        </AppDataTable>
 
         <Dialog :open="showModal" @update:open="showModal = $event">
-            <DialogContent class="max-w-md">
+            <FormDialogContent class="max-w-md">
                 <DialogHeader><DialogTitle>{{ editingSP ? 'Editar Punto' : 'Nuevo Punto de Servicio' }}</DialogTitle></DialogHeader>
                 <form @submit.prevent="submit" class="space-y-4">
-                    <div>
-                        <Label>Empresa *</Label>
-                        <Select v-model="form.client_id">
-                            <SelectTrigger class="mt-1"><SelectValue placeholder="Selecciona empresa..." /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem v-for="c in clients" :key="c.id" :value="String(c.id)">{{ c.name }}</SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <p v-if="form.errors.client_id" class="text-destructive text-xs mt-1">{{ form.errors.client_id }}</p>
-                    </div>
-                    <div>
-                        <Label>Nombre *</Label>
-                        <Input v-model="form.name" placeholder="Ej. Planta Norte - Turno A" class="mt-1" />
-                        <p v-if="form.errors.name" class="text-destructive text-xs mt-1">{{ form.errors.name }}</p>
-                    </div>
-                    <div>
-                        <Label>Dirección</Label>
-                        <Textarea v-model="form.address" placeholder="Dirección completa (opcional)" class="mt-1" rows="2" />
-                    </div>
-                    <div>
-                        <Label>Estado</Label>
-                        <Select v-model="form.status">
-                            <SelectTrigger class="mt-1"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="activo">Activo</SelectItem>
-                                <SelectItem value="inactivo">Inactivo</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <DialogFooter>
-                        <Button type="button" variant="outline" @click="showModal = false">Cancelar</Button>
-                        <Button type="submit" :disabled="form.processing">{{ form.processing ? 'Guardando...' : 'Guardar' }}</Button>
-                    </DialogFooter>
+                    <FormSelect v-model="form.client_id" label="Empresa" required placeholder="Selecciona empresa..." :error="form.errors.client_id">
+                        <SelectItem v-for="c in clients" :key="c.id" :value="String(c.id)">{{ c.name }}</SelectItem>
+                    </FormSelect>
+                    <FormInput v-model="form.name" label="Nombre" required placeholder="Ej. Planta Norte - Turno A" :error="form.errors.name" />
+                    <FormTextarea v-model="form.address" label="Dirección" placeholder="Dirección completa (opcional)" :rows="2" :error="form.errors.address" />
+                    <FormSelect v-model="form.status" label="Estado" required :error="form.errors.status">
+                        <SelectItem value="activo">Activo</SelectItem>
+                        <SelectItem value="inactivo">Inactivo</SelectItem>
+                    </FormSelect>
+                    <FormActions :processing="form.processing" @cancel="showModal = false" />
                 </form>
-            </DialogContent>
+            </FormDialogContent>
         </Dialog>
 
         <DeleteDialog
