@@ -82,20 +82,20 @@ const STATUSES = ['presente', 'falta', 'descanso', 'permiso', 'incapacidad', 're
             </div>
             <div>
                 <Label class="text-xs">Empresa</Label>
-                <Select v-model="clientId">
+                <Select :model-value="clientId || '__all__'" @update:model-value="(v) => clientId = v === '__all__' ? '' : (v as string)">
                     <SelectTrigger class="mt-1 h-8 text-sm"><SelectValue placeholder="Todas" /></SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="">Todas</SelectItem>
+                        <SelectItem value="__all__">Todas</SelectItem>
                         <SelectItem v-for="c in clients" :key="c.id" :value="String(c.id)">{{ c.name }}</SelectItem>
                     </SelectContent>
                 </Select>
             </div>
             <div>
                 <Label class="text-xs">Estado</Label>
-                <Select v-model="status">
+                <Select :model-value="status || '__all__'" @update:model-value="(v) => status = v === '__all__' ? '' : (v as string)">
                     <SelectTrigger class="mt-1 h-8 text-sm"><SelectValue placeholder="Todos" /></SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="">Todos</SelectItem>
+                        <SelectItem value="__all__">Todos</SelectItem>
                         <SelectItem v-for="s in STATUSES" :key="s" :value="s">{{ s.charAt(0).toUpperCase() + s.slice(1) }}</SelectItem>
                     </SelectContent>
                 </Select>

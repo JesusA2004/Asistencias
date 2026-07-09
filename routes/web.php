@@ -47,6 +47,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::delete('/colaboradores/{employee}', [EmployeeController::class, 'destroy'])->name('empleados.destroy');
     });
 
+    Route::middleware('permission:Importar colaboradores')->group(function () {
+        Route::post('/colaboradores/importar', [EmployeeController::class, 'import'])->name('empleados.importar');
+    });
+
     Route::middleware('permission:Ver empresas')->group(function () {
         Route::get('/empresas', [ClientController::class, 'index'])->name('clientes.index');
         Route::post('/empresas', [ClientController::class, 'store'])->name('clientes.store');

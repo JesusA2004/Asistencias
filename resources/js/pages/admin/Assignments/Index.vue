@@ -134,10 +134,10 @@ const onPage = (p: number) => router.get('/asignaciones', { ...props.filters, pa
                     </div>
                     <div>
                         <Label>Punto de Servicio (opcional)</Label>
-                        <Select v-model="form.service_point_id" :disabled="!form.client_id">
+                        <Select :model-value="form.service_point_id || '__all__'" :disabled="!form.client_id" @update:model-value="(v) => form.service_point_id = v === '__all__' ? '' : (v as string)">
                             <SelectTrigger class="mt-1"><SelectValue placeholder="Todos los puntos (sin especificar)" /></SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="">Todos los puntos</SelectItem>
+                                <SelectItem value="__all__">Todos los puntos</SelectItem>
                                 <SelectItem v-for="sp in filteredSPs(form.client_id)" :key="sp.id" :value="String(sp.id)">{{ sp.name }}</SelectItem>
                             </SelectContent>
                         </Select>

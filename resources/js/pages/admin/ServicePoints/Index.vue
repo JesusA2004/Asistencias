@@ -86,10 +86,10 @@ const onPage = (p: number) => router.get('/puntos-servicio', { ...props.filters,
 
         <!-- Client filter -->
         <div class="mb-4">
-            <Select :model-value="filters.client_id ?? ''" @update:model-value="(v) => router.get('/puntos-servicio', { ...filters, client_id: v || undefined }, { preserveState: true })">
+            <Select :model-value="filters.client_id ?? '__all__'" @update:model-value="(v) => router.get('/puntos-servicio', { ...filters, client_id: v === '__all__' ? undefined : v }, { preserveState: true })">
                 <SelectTrigger class="w-64"><SelectValue placeholder="Filtrar por empresa..." /></SelectTrigger>
                 <SelectContent>
-                    <SelectItem value="">Todas las empresas</SelectItem>
+                    <SelectItem value="__all__">Todas las empresas</SelectItem>
                     <SelectItem v-for="c in clients" :key="c.id" :value="String(c.id)">{{ c.name }}</SelectItem>
                 </SelectContent>
             </Select>

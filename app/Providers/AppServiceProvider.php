@@ -9,6 +9,7 @@ use App\Models\Employee;
 use App\Models\ServicePoint;
 use App\Models\Shift;
 use App\Models\SupervisorAssignment;
+use App\Models\User;
 use App\Policies\AttendanceAuditPolicy;
 use App\Policies\AttendancePolicy;
 use App\Policies\ClientPolicy;
@@ -16,6 +17,7 @@ use App\Policies\EmployeePolicy;
 use App\Policies\ServicePointPolicy;
 use App\Policies\ShiftPolicy;
 use App\Policies\SupervisorAssignmentPolicy;
+use App\Policies\UserPolicy;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider;
 use Illuminate\Support\Facades\Date;
@@ -36,6 +38,7 @@ class AppServiceProvider extends AuthServiceProvider
         Attendance::class => AttendancePolicy::class,
         AttendanceAudit::class => AttendanceAuditPolicy::class,
         Role::class => \App\Policies\RolePolicy::class,
+        User::class => UserPolicy::class,
     ];
 
     public function register(): void {}

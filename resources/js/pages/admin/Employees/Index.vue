@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
-import { HardHat, Pencil, Plus, Trash2 } from '@lucide/vue';
+import { HardHat, Pencil, Plus, Trash2, Upload } from '@lucide/vue';
+import { toast } from 'vue-sonner';
 import DeleteDialog from '@/components/DeleteDialog.vue';
 import EmptyState from '@/components/EmptyState.vue';
 import PageHeader from '@/components/PageHeader.vue';
@@ -28,8 +29,13 @@ const props = defineProps<{
 
 const { hasPermission } = usePermissions();
 const showModal = ref(false);
+const showImportModal = ref(false);
 const deleteId = ref<number | null>(null);
 const editingEmployee = ref<Employee | null>(null);
+
+const importForm = useForm<{ file: File | null }>({
+    file: null,
+});
 
 const form = useForm({
     employee_number: '',
@@ -89,6 +95,29 @@ const confirmDelete = () => {
     router.delete(`/colaboradores/${deleteId.value}`, { onFinish: () => { deleteId.value = null; } });
 };
 
+const openImport = () => {
+    importForm.reset();
+    importForm.clearErrors();
+    showImportModal.value = true;
+};
+
+const onFileChange = (e: Event) => {
+    importForm.file = (e.target as HTMLInputElement).files?.[0] ?? null;
+};
+
+const submitImport = () => {
+    importForm.post('/colaboradores/importar', {
+        forceFormData: true,
+        onSuccess: (page) => {
+            const flash = (page.props.flash ?? {}) as { success?: string | null; error?: string | null };
+            if (flash.success) toast.success(flash.success);
+            if (flash.error) toast.error(flash.error);
+            showImportModal.value = false;
+            importForm.reset();
+        },
+    });
+};
+
 const onSearch = (q: string) => router.get('/colaboradores', { ...props.filters, search: q }, { preserveState: true, replace: true });
 const onPage = (p: number) => router.get('/colaboradores', { ...props.filters, page: p }, { preserveState: true });
 
@@ -99,6 +128,9 @@ const filteredSPs = (clientId: string) => props.servicePoints.filter((sp) => !cl
     <div class="p-6">
         <PageHeader title="Colaboradores" description="Gestión del personal de seguridad activo">
             <template #actions>
+                <Button v-if="hasPermission('Importar colaboradores')" variant="outline" @click="openImport">
+                    <Upload class="h-4 w-4 mr-2" /> Importar colaboradores
+                </Button>
                 <Button v-if="hasPermission('Crear colaboradores')" @click="openCreate">
                     <Plus class="h-4 w-4 mr-2" /> Nuevo Colaborador
                 </Button>
@@ -110,17 +142,17 @@ const filteredSPs = (clientId: string) => props.servicePoints.filter((sp) => !cl
             <div class="relative flex-1 min-w-[200px] max-w-sm">
                 <Input placeholder="Buscar por nombre o número..." @input="(e) => onSearch((e.target as HTMLInputElement).value)" />
             </div>
-            <Select :model-value="filters.client_id ?? ''" @update:model-value="(v) => router.get('/colaboradores', { ...filters, client_id: v || undefined }, { preserveState: true })">
+            <Select :model-value="filters.client_id ?? '__all__'" @update:model-value="(v) => router.get('/colaboradores', { ...filters, client_id: v === '__all__' ? undefined : v }, { preserveState: true })">
                 <SelectTrigger class="w-48"><SelectValue placeholder="Empresa..." /></SelectTrigger>
                 <SelectContent>
-                    <SelectItem value="">Todas</SelectItem>
+                    <SelectItem value="__all__">Todas</SelectItem>
                     <SelectItem v-for="c in clients" :key="c.id" :value="String(c.id)">{{ c.name }}</SelectItem>
                 </SelectContent>
             </Select>
-            <Select :model-value="filters.status ?? ''" @update:model-value="(v) => router.get('/colaboradores', { ...filters, status: v || undefined }, { preserveState: true })">
+            <Select :model-value="filters.status ?? '__all__'" @update:model-value="(v) => router.get('/colaboradores', { ...filters, status: v === '__all__' ? undefined : v }, { preserveState: true })">
                 <SelectTrigger class="w-36"><SelectValue placeholder="Estado..." /></SelectTrigger>
                 <SelectContent>
-                    <SelectItem value="">Todos</SelectItem>
+                    <SelectItem value="__all__">Todos</SelectItem>
                     <SelectItem value="activo">Activo</SelectItem>
                     <SelectItem value="inactivo">Inactivo</SelectItem>
                     <SelectItem value="baja">Baja</SelectItem>
@@ -269,5 +301,31 @@ const filteredSPs = (clientId: string) => props.servicePoints.filter((sp) => !cl
             @update:open="deleteId = null"
             @confirm="confirmDelete"
         />
+
+        <!-- Import modal -->
+        <Dialog :open="showImportModal" @update:open="showImportModal = $event">
+            <DialogContent class="max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Importar colaboradores</DialogTitle>
+                </DialogHeader>
+                <form @submit.prevent="submitImport" class="space-y-3">
+                    <p class="text-sm text-muted-foreground">
+                        Sube un archivo Excel (.xlsx, .xls o .csv) con las columnas:
+                        <code class="text-xs">employee_number, name, last_name, second_last_name, email, phone, status, client_id, service_point_id, shift_id</code>.
+                    </p>
+                    <div>
+                        <Label>Archivo *</Label>
+                        <Input type="file" accept=".xlsx,.xls,.csv" class="mt-1" @change="onFileChange" />
+                        <p v-if="importForm.errors.file" class="text-destructive text-xs mt-1">{{ importForm.errors.file }}</p>
+                    </div>
+                    <DialogFooter>
+                        <Button type="button" variant="outline" @click="showImportModal = false">Cancelar</Button>
+                        <Button type="submit" :disabled="importForm.processing || !importForm.file">
+                            {{ importForm.processing ? 'Importando...' : 'Importar' }}
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
     </div>
 </template>

@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Employee\ImportEmployeeRequest;
 use App\Http\Requests\Employee\StoreEmployeeRequest;
 use App\Http\Requests\Employee\UpdateEmployeeRequest;
+use App\Imports\EmployeeImport;
 use App\Models\Client;
 use App\Models\Employee;
 use App\Models\ServicePoint;
@@ -13,6 +15,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Maatwebsite\Excel\Facades\Excel;
 
 class EmployeeController extends Controller
 {
@@ -65,5 +68,25 @@ class EmployeeController extends Controller
         $employee->delete();
 
         return back()->with('success', 'Colaborador eliminado correctamente.');
+    }
+
+    public function import(ImportEmployeeRequest $request): RedirectResponse
+    {
+        $import = new EmployeeImport();
+        Excel::import($import, $request->file('file'));
+
+        $failures = $import->failures();
+
+        if ($failures->isEmpty()) {
+            return back()->with('success', "Se importaron {$import->imported} colaboradores correctamente.");
+        }
+
+        $errorMessages = $failures
+            ->map(fn ($failure) => "Fila {$failure->row()}: " . implode(' ', $failure->errors()))
+            ->implode(' | ');
+
+        return back()
+            ->with('success', $import->imported > 0 ? "Se importaron {$import->imported} colaboradores." : null)
+            ->with('error', "{$failures->count()} fila(s) con errores: {$errorMessages}");
     }
 }

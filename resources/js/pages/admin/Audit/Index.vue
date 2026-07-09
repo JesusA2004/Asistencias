@@ -48,10 +48,10 @@ const actionColors: Record<string, string> = {
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6 bg-muted/30 p-4 rounded-lg border">
             <div>
                 <Label class="text-xs">Acción</Label>
-                <Select v-model="filterAction" @update:model-value="applyFilters">
+                <Select :model-value="filterAction || '__all__'" @update:model-value="(v) => { filterAction = v === '__all__' ? '' : (v as string); applyFilters(); }">
                     <SelectTrigger class="mt-1 h-8 text-sm"><SelectValue placeholder="Todas" /></SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="">Todas</SelectItem>
+                        <SelectItem value="__all__">Todas</SelectItem>
                         <SelectItem value="creado">Creado</SelectItem>
                         <SelectItem value="actualizado">Actualizado</SelectItem>
                         <SelectItem value="corregido">Corregido</SelectItem>

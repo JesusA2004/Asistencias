@@ -19,9 +19,9 @@ class ReportController extends Controller
 {
     public function index(Request $request): Response
     {
-        $this->authorize('viewAny', \App\Models\AttendanceAudit::class);
+        abort_unless(auth()->user()->can('Ver reportes'), 403);
 
-        $attendances = collect();
+        $attendances = null;
         $summary = null;
 
         if ($request->date_from && $request->date_to) {
@@ -68,7 +68,7 @@ class ReportController extends Controller
 
     public function exportExcel(Request $request): \Symfony\Component\HttpFoundation\BinaryFileResponse
     {
-        $this->authorize('create', \App\Models\AttendanceAudit::class);
+        abort_unless(auth()->user()->can('Exportar reportes'), 403);
 
         $request->validate([
             'date_from' => 'required|date',
@@ -83,7 +83,7 @@ class ReportController extends Controller
 
     public function exportPdf(Request $request): HttpResponse
     {
-        $this->authorize('create', \App\Models\AttendanceAudit::class);
+        abort_unless(auth()->user()->can('Exportar reportes'), 403);
 
         $request->validate([
             'date_from' => 'required|date',

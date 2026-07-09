@@ -103,30 +103,30 @@ const STATUSES = ['presente', 'falta', 'descanso', 'permiso', 'incapacidad', 're
             </div>
             <div>
                 <Label class="text-xs">Empresa</Label>
-                <Select v-model="filterClient" @update:model-value="applyFilters">
+                <Select :model-value="filterClient || '__all__'" @update:model-value="(v) => { filterClient = v === '__all__' ? '' : (v as string); applyFilters(); }">
                     <SelectTrigger class="mt-1 h-8 text-sm"><SelectValue placeholder="Todas" /></SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="">Todas</SelectItem>
+                        <SelectItem value="__all__">Todas</SelectItem>
                         <SelectItem v-for="c in clients" :key="c.id" :value="String(c.id)">{{ c.name }}</SelectItem>
                     </SelectContent>
                 </Select>
             </div>
             <div>
                 <Label class="text-xs">Punto Servicio</Label>
-                <Select v-model="filterSP" @update:model-value="applyFilters">
+                <Select :model-value="filterSP || '__all__'" @update:model-value="(v) => { filterSP = v === '__all__' ? '' : (v as string); applyFilters(); }">
                     <SelectTrigger class="mt-1 h-8 text-sm"><SelectValue placeholder="Todos" /></SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="">Todos</SelectItem>
+                        <SelectItem value="__all__">Todos</SelectItem>
                         <SelectItem v-for="sp in servicePoints" :key="sp.id" :value="String(sp.id)">{{ sp.name }}</SelectItem>
                     </SelectContent>
                 </Select>
             </div>
             <div>
                 <Label class="text-xs">Estado</Label>
-                <Select v-model="filterStatus" @update:model-value="applyFilters">
+                <Select :model-value="filterStatus || '__all__'" @update:model-value="(v) => { filterStatus = v === '__all__' ? '' : (v as string); applyFilters(); }">
                     <SelectTrigger class="mt-1 h-8 text-sm"><SelectValue placeholder="Todos" /></SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="">Todos</SelectItem>
+                        <SelectItem value="__all__">Todos</SelectItem>
                         <SelectItem v-for="s in STATUSES" :key="s" :value="s">{{ s.charAt(0).toUpperCase() + s.slice(1) }}</SelectItem>
                     </SelectContent>
                 </Select>

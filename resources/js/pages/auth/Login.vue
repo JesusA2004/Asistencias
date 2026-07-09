@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Form, Head } from '@inertiajs/vue3';
-import { ShieldCheck, UserCheck, ClipboardList, BarChart3, FileSpreadsheet, Lock } from '@lucide/vue';
+import { UserCheck, ClipboardList, BarChart3, FileSpreadsheet, ShieldCheck, Lock } from '@lucide/vue';
+import AppLogoIcon from '@/components/AppLogoIcon.vue';
 import InputError from '@/components/InputError.vue';
 import PasskeyVerify from '@/components/PasskeyVerify.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
@@ -34,31 +35,31 @@ const features = [
 
         <!-- ── Panel izquierdo: Marca ─────────────────────────── -->
         <div class="relative hidden lg:flex lg:w-1/2 flex-col justify-between p-12
-                    bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white overflow-hidden">
+                    bg-gradient-to-br from-neutral-950 via-neutral-900 to-neutral-950 text-white overflow-hidden">
 
-            <!-- Círculos decorativos de fondo -->
+            <!-- Textura y resplandores decorativos -->
             <div class="absolute inset-0 pointer-events-none">
-                <div class="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-blue-600/10 blur-3xl"></div>
-                <div class="absolute -bottom-32 -right-16 w-80 h-80 rounded-full bg-indigo-500/15 blur-3xl"></div>
-                <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-slate-700/20 blur-2xl"></div>
+                <div class="absolute inset-0 opacity-[0.04] [background-image:radial-gradient(circle_at_1px_1px,white_1px,transparent_0)] [background-size:28px_28px]"></div>
+                <div class="absolute -top-32 -left-24 w-96 h-96 rounded-full bg-white/[0.06] blur-3xl"></div>
+                <div class="absolute -bottom-40 -right-20 w-96 h-96 rounded-full bg-white/[0.05] blur-3xl"></div>
             </div>
 
             <!-- Contenido superior: Logo + Nombre -->
             <div class="relative z-10">
                 <div class="flex items-center gap-3 mb-12">
-                    <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-600 shadow-lg">
-                        <ShieldCheck class="h-6 w-6 text-white" />
+                    <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-white shadow-lg shadow-black/20">
+                        <AppLogoIcon class="h-6 w-6 fill-current text-neutral-950" />
                     </div>
                     <div>
-                        <p class="text-xs font-semibold uppercase tracking-widest text-blue-400">SGA</p>
-                        <p class="text-sm font-medium text-slate-300 leading-tight">Seguridad Privada</p>
+                        <p class="text-xs font-semibold uppercase tracking-widest text-white/50">SGA</p>
+                        <p class="text-sm font-medium text-neutral-300 leading-tight">Seguridad Privada</p>
                     </div>
                 </div>
 
-                <h1 class="text-4xl font-bold leading-tight mb-4">
+                <h1 class="text-4xl font-bold leading-tight mb-4 tracking-tight">
                     Sistema de Gestión<br />de Asistencias
                 </h1>
-                <p class="text-slate-300 text-lg leading-relaxed mb-10">
+                <p class="text-neutral-400 text-lg leading-relaxed mb-10">
                     Control operativo diario para empresas<br />de seguridad privada.
                 </p>
 
@@ -66,9 +67,9 @@ const features = [
                     <li
                         v-for="f in features"
                         :key="f.text"
-                        class="flex items-center gap-3 text-slate-300 text-sm"
+                        class="flex items-center gap-3 text-neutral-300 text-sm"
                     >
-                        <span class="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600/20 text-blue-400 flex-shrink-0">
+                        <span class="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 text-white flex-shrink-0">
                             <component :is="f.icon" class="h-4 w-4" />
                         </span>
                         {{ f.text }}
@@ -77,12 +78,12 @@ const features = [
             </div>
 
             <!-- Contenido inferior: Tagline -->
-            <div class="relative z-10 border-t border-slate-700 pt-6">
-                <div class="flex items-center gap-2 text-xs text-slate-400">
-                    <Lock class="h-3.5 w-3.5 text-blue-400" />
+            <div class="relative z-10 border-t border-white/10 pt-6">
+                <div class="flex items-center gap-2 text-xs text-neutral-400">
+                    <Lock class="h-3.5 w-3.5 text-white/60" />
                     <span>Acceso exclusivo para personal autorizado</span>
                 </div>
-                <p class="mt-1 text-xs text-slate-500">
+                <p class="mt-1 text-xs text-neutral-500">
                     Protegido con roles, permisos y auditoría de cambios
                 </p>
             </div>
@@ -93,8 +94,8 @@ const features = [
 
             <!-- Logo visible solo en móvil -->
             <div class="flex lg:hidden items-center gap-3 mb-8">
-                <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600">
-                    <ShieldCheck class="h-5 w-5 text-white" />
+                <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary shadow-sm">
+                    <AppLogoIcon class="h-5 w-5 fill-current text-primary-foreground" />
                 </div>
                 <div>
                     <p class="text-sm font-bold leading-tight">Sistema de Gestión</p>
@@ -104,7 +105,7 @@ const features = [
 
             <div class="w-full max-w-sm">
                 <div class="mb-8">
-                    <h2 class="text-2xl font-bold">Iniciar sesión</h2>
+                    <h2 class="text-2xl font-bold tracking-tight">Iniciar sesión</h2>
                     <p class="mt-1 text-sm text-muted-foreground">
                         Ingresa tus credenciales para acceder al sistema
                     </p>
@@ -119,7 +120,12 @@ const features = [
                 </div>
 
                 <!-- Passkeys -->
-                <PasskeyVerify class="mb-4" />
+                <PasskeyVerify
+                    class="mb-4"
+                    label="Iniciar sesión con passkey"
+                    loading-label="Autenticando..."
+                    separator="O continúa con tu correo"
+                />
 
                 <Form
                     v-bind="store.form()"
@@ -174,7 +180,7 @@ const features = [
 
                     <Button
                         type="submit"
-                        class="w-full"
+                        class="w-full h-10 shadow-sm"
                         :tabindex="4"
                         :disabled="processing"
                         data-test="login-button"
@@ -185,7 +191,7 @@ const features = [
                 </Form>
 
                 <div class="mt-8 flex items-center gap-2 text-xs text-muted-foreground">
-                    <Lock class="h-3.5 w-3.5 flex-shrink-0 text-blue-500" />
+                    <Lock class="h-3.5 w-3.5 flex-shrink-0" />
                     <span>Administración de colaboradores, turnos, ubicaciones y asistencias</span>
                 </div>
             </div>

@@ -82,12 +82,39 @@ class AttendanceCaptureController extends Controller
         ]);
 
         $user = auth()->user();
-        $supervisorAssignment = $user->supervisorAssignments()
-            ->where('client_id', $request->client_id)
-            ->first();
 
-        if (! $supervisorAssignment) {
+        $assignments = $user->supervisorAssignments()
+            ->where('client_id', $request->client_id)
+            ->get();
+
+        if ($assignments->isEmpty()) {
             return back()->with('error', 'No tienes asignación para esta empresa.');
+        }
+
+        $hasClientWideAccess = $assignments->contains(fn ($a) => $a->service_point_id === null);
+        $hasSpecificPointAccess = $assignments->contains(fn ($a) => (int) $a->service_point_id === (int) $request->service_point_id);
+
+        if (! $hasClientWideAccess && ! $hasSpecificPointAccess) {
+            return back()->with('error', 'No tienes asignación para este punto de servicio.');
+        }
+
+        $servicePointBelongsToClient = ServicePoint::where('id', $request->service_point_id)
+            ->where('client_id', $request->client_id)
+            ->exists();
+
+        if (! $servicePointBelongsToClient) {
+            return back()->with('error', 'El punto de servicio no pertenece a la empresa seleccionada.');
+        }
+
+        $employeeIds = collect($request->records)->pluck('employee_id')->unique();
+
+        $validEmployeeCount = Employee::whereIn('id', $employeeIds)
+            ->where('client_id', $request->client_id)
+            ->where('service_point_id', $request->service_point_id)
+            ->count();
+
+        if ($validEmployeeCount !== $employeeIds->count()) {
+            return back()->with('error', 'Uno o más colaboradores no pertenecen a la empresa o punto de servicio seleccionados.');
         }
 
         DB::transaction(function () use ($request, $user) {
@@ -126,6 +153,46 @@ class AttendanceCaptureController extends Controller
                     'changed_by' => $user->id,
                     'created_at' => now(),
                 ]);
+
+                AttendanceEvent::create([
+                    'attendance_id' => $attendance->id,
+                    'event_type' => 'asistencia',
+                    'event_time' => now(),
+                    'value' => $attendance->status,
+                    'created_by' => $user->id,
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                    'notes' => null,
+                    'created_at' => now(),
+                ]);
+
+                if ($attendance->entry_time !== null) {
+                    AttendanceEvent::create([
+                        'attendance_id' => $attendance->id,
+                        'event_type' => 'entrada',
+                        'event_time' => Carbon::parse($attendance->attendance_date->format('Y-m-d') . ' ' . $attendance->entry_time),
+                        'value' => (string) $attendance->entry_time,
+                        'created_by' => $user->id,
+                        'ip_address' => $request->ip(),
+                        'user_agent' => $request->userAgent(),
+                        'notes' => null,
+                        'created_at' => now(),
+                    ]);
+                }
+
+                if ($attendance->exit_time !== null) {
+                    AttendanceEvent::create([
+                        'attendance_id' => $attendance->id,
+                        'event_type' => 'salida',
+                        'event_time' => Carbon::parse($attendance->attendance_date->format('Y-m-d') . ' ' . $attendance->exit_time),
+                        'value' => (string) $attendance->exit_time,
+                        'created_by' => $user->id,
+                        'ip_address' => $request->ip(),
+                        'user_agent' => $request->userAgent(),
+                        'notes' => null,
+                        'created_at' => now(),
+                    ]);
+                }
             }
         });
 
