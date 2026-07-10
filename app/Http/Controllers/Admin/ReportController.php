@@ -7,8 +7,10 @@ use App\Models\Attendance;
 use App\Models\Client;
 use App\Models\Employee;
 use App\Models\ServicePoint;
+use App\Models\Shift;
+use App\Models\User;
 use Barryvdh\DomPDF\Facade\Pdf;
-use Carbon\Carbon;
+use Illuminate\Contracts\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
 use Inertia\Inertia;
@@ -17,6 +19,39 @@ use Maatwebsite\Excel\Facades\Excel;
 
 class ReportController extends Controller
 {
+    /**
+     * Aplica todos los filtros del reporte a una consulta de asistencias.
+     * Se usa tanto en la vista como en la exportación a Excel y PDF, para que
+     * los tres siempre respeten exactamente los mismos filtros.
+     */
+    public static function applyFilters(Builder $query, Request $request): Builder
+    {
+        return $query
+            ->when($request->date_from, fn ($q, $v) => $q->whereDate('attendance_date', '>=', $v))
+            ->when($request->date_to, fn ($q, $v) => $q->whereDate('attendance_date', '<=', $v))
+            ->when($request->client_id, fn ($q, $v) => $q->where('client_id', $v))
+            ->when($request->service_point_id, fn ($q, $v) => $q->where('service_point_id', $v))
+            ->when($request->employee_id, fn ($q, $v) => $q->where('employee_id', $v))
+            ->when($request->supervisor_id, fn ($q, $v) => $q->where('supervisor_id', $v))
+            ->when($request->shift_id, fn ($q, $v) => $q->where('shift_id', $v))
+            ->when($request->status, fn ($q, $v) => $q->where('status', $v))
+            ->when($request->boolean('only_incidents'), fn ($q) => $q->whereIn('status', ['falta', 'retardo']))
+            ->when($request->boolean('only_present'), fn ($q) => $q->where('status', 'presente'))
+            ->when($request->search, fn ($q, $v) => $q->whereHas('employee', fn ($eq) => $eq
+                ->where('employee_number', 'like', "%{$v}%")
+                ->orWhere('name', 'like', "%{$v}%")
+                ->orWhere('last_name', 'like', "%{$v}%")
+                ->orWhere('second_last_name', 'like', "%{$v}%")));
+    }
+
+    private function filterKeys(): array
+    {
+        return [
+            'date_from', 'date_to', 'client_id', 'service_point_id', 'employee_id',
+            'supervisor_id', 'shift_id', 'status', 'search', 'only_incidents', 'only_present',
+        ];
+    }
+
     public function index(Request $request): Response
     {
         abort_unless(auth()->user()->can('Ver reportes'), 403);
@@ -25,24 +60,19 @@ class ReportController extends Controller
         $summary = null;
 
         if ($request->date_from && $request->date_to) {
-            $query = Attendance::query()
-                ->with([
+            $query = self::applyFilters(
+                Attendance::query()->with([
                     'employee:id,employee_number,name,last_name',
                     'client:id,name',
                     'servicePoint:id,name',
                     'supervisor:id,name',
-                ])
-                ->whereBetween('attendance_date', [$request->date_from, $request->date_to])
-                ->when($request->client_id, fn ($q, $c) => $q->where('client_id', $c))
-                ->when($request->service_point_id, fn ($q, $sp) => $q->where('service_point_id', $sp))
-                ->when($request->status, fn ($q, $s) => $q->where('status', $s))
-                ->orderBy('attendance_date')
-                ->orderBy('employee_id');
+                ]),
+                $request
+            )->orderBy('attendance_date')->orderBy('employee_id');
 
             $attendances = $query->paginate(50)->withQueryString();
 
-            $summary = Attendance::whereBetween('attendance_date', [$request->date_from, $request->date_to])
-                ->when($request->client_id, fn ($q, $c) => $q->where('client_id', $c))
+            $summary = self::applyFilters(Attendance::query(), $request)
                 ->selectRaw('
                     COUNT(*) as total,
                     SUM(status = "presente") as presente,
@@ -59,10 +89,11 @@ class ReportController extends Controller
             'attendances' => $attendances,
             'summary' => $summary,
             'clients' => Client::where('status', 'activo')->orderBy('name')->get(['id', 'name']),
-            'servicePoints' => $request->client_id
-                ? ServicePoint::where('client_id', $request->client_id)->orderBy('name')->get(['id', 'name'])
-                : [],
-            'filters' => $request->only(['date_from', 'date_to', 'client_id', 'service_point_id', 'status']),
+            'servicePoints' => ServicePoint::where('status', 'activo')->orderBy('name')->get(['id', 'client_id', 'name']),
+            'employees' => Employee::orderBy('name')->get(['id', 'client_id', 'employee_number', 'name', 'last_name']),
+            'supervisors' => User::role('supervisor')->orderBy('name')->get(['id', 'name']),
+            'shifts' => Shift::orderBy('name')->get(['id', 'name']),
+            'filters' => $request->only($this->filterKeys()),
         ]);
     }
 
@@ -76,7 +107,7 @@ class ReportController extends Controller
         ]);
 
         return Excel::download(
-            new \App\Exports\AttendanceExport($request->all()),
+            new \App\Exports\AttendanceExport($request),
             'reporte-asistencias-' . $request->date_from . '-' . $request->date_to . '.xlsx'
         );
     }
@@ -90,14 +121,15 @@ class ReportController extends Controller
             'date_to' => 'required|date|after_or_equal:date_from',
         ]);
 
-        $attendances = Attendance::with([
-            'employee:id,employee_number,name,last_name',
-            'client:id,name',
-            'servicePoint:id,name',
-            'supervisor:id,name',
-        ])
-            ->whereBetween('attendance_date', [$request->date_from, $request->date_to])
-            ->when($request->client_id, fn ($q, $c) => $q->where('client_id', $c))
+        $attendances = self::applyFilters(
+            Attendance::query()->with([
+                'employee:id,employee_number,name,last_name',
+                'client:id,name',
+                'servicePoint:id,name',
+                'supervisor:id,name',
+            ]),
+            $request
+        )
             ->orderBy('attendance_date')
             ->limit(1000)
             ->get();

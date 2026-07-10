@@ -24,31 +24,39 @@ class AttendanceCaptureController extends Controller
         $user = auth()->user();
         $this->authorize('create', Attendance::class);
 
-        $assignedClientIds = $user->supervisorAssignments()->pluck('client_id');
-        $assignedSPIds = $user->supervisorAssignments()->whereNotNull('service_point_id')->pluck('service_point_id');
+        $assignedClientIds = $user->supervisorAssignments()->pluck('client_id')->unique();
+        $assignedSPIds = $user->supervisorAssignments()->whereNotNull('service_point_id')->pluck('service_point_id')->unique();
 
         $clients = Client::whereIn('id', $assignedClientIds)->where('status', 'activo')->orderBy('name')->get(['id', 'name']);
 
-        $servicePoints = collect();
+        // Se cargan todos los puntos de servicio asignados (de todas las empresas) para
+        // que el frontend filtre por empresa al instante, sin ida y vuelta al servidor.
+        $servicePoints = ServicePoint::whereIn('client_id', $assignedClientIds)
+            ->where('status', 'activo')
+            ->when($assignedSPIds->isNotEmpty(), fn ($q) => $q->whereIn('id', $assignedSPIds))
+            ->orderBy('name')
+            ->get(['id', 'client_id', 'name']);
+
         $employees = collect();
         $existingAttendances = collect();
 
-        if ($request->client_id && $assignedClientIds->contains($request->client_id)) {
-            $servicePoints = ServicePoint::where('client_id', $request->client_id)
-                ->where('status', 'activo')
-                ->when($assignedSPIds->isNotEmpty(), fn ($q) => $q->whereIn('id', $assignedSPIds))
-                ->orderBy('name')
-                ->get(['id', 'name']);
+        $clientId = $request->integer('client_id');
+        $servicePointId = $request->integer('service_point_id');
 
-            if ($request->service_point_id) {
+        if ($clientId && $servicePointId && $assignedClientIds->contains($clientId)) {
+            $spBelongsToClient = $servicePoints->contains(
+                fn ($sp) => (int) $sp->id === $servicePointId && (int) $sp->client_id === $clientId
+            );
+
+            if ($spBelongsToClient) {
                 $date = $request->date ?? Carbon::today()->format('Y-m-d');
 
-                $employees = Employee::where('service_point_id', $request->service_point_id)
+                $employees = Employee::where('service_point_id', $servicePointId)
                     ->where('status', 'activo')
                     ->orderBy('last_name')
                     ->get(['id', 'employee_number', 'name', 'last_name', 'second_last_name']);
 
-                $existingAttendances = Attendance::where('service_point_id', $request->service_point_id)
+                $existingAttendances = Attendance::where('service_point_id', $servicePointId)
                     ->whereDate('attendance_date', $date)
                     ->get()
                     ->keyBy('employee_id');
@@ -61,7 +69,6 @@ class AttendanceCaptureController extends Controller
             'employees' => $employees,
             'existingAttendances' => $existingAttendances,
             'filters' => $request->only(['client_id', 'service_point_id', 'date']),
-            'alreadySaved' => $existingAttendances->isNotEmpty(),
         ]);
     }
 

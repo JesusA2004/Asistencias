@@ -24,7 +24,7 @@ const placeholder = useVModel(props, "placeholder", emits, {
   defaultValue: props.defaultPlaceholder ?? today(getLocalTimeZone()),
 }) as Ref<DateValue>
 
-const formatter = useDateFormatter(props.locale ?? "en")
+const formatter = useDateFormatter(props.locale ?? "es-MX")
 
 const yearRange = computed(() => {
   return props.yearRange ?? createYearRange({

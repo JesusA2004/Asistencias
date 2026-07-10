@@ -2,13 +2,9 @@
 import {
     AlertCircle,
     AlertTriangle,
-    Building2,
-    CheckCircle2,
-    Clock,
     TrendingDown,
     TrendingUp,
     Users,
-    XCircle,
 } from '@lucide/vue';
 import { computed } from 'vue';
 import AppChart from '@/components/AppChart.vue';
@@ -117,7 +113,7 @@ return cur > 0 ? 100 : 0;
         </div>
 
         <!-- KPIs -->
-        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <KPICard
                 title="Colaboradores Activos"
                 :value="stats.active_employees.toLocaleString()"
@@ -126,35 +122,18 @@ return cur > 0 ? 100 : 0;
                 subtitle="Total en sistema"
             />
             <KPICard
-                title="Presentes Hoy"
-                :value="stats.today_present.toLocaleString()"
-                :icon="CheckCircle2"
-                color="green"
-            />
-            <KPICard
-                title="Faltas Hoy"
-                :value="stats.today_absent.toLocaleString()"
-                :icon="XCircle"
-                color="red"
-            />
-            <KPICard
-                title="Retardos Hoy"
-                :value="stats.today_late.toLocaleString()"
-                :icon="Clock"
-                color="purple"
-            />
-            <KPICard
-                title="Cumplimiento"
+                title="Cumplimiento Hoy"
                 :value="`${stats.compliance_percentage}%`"
                 :icon="TrendingUp"
                 color="green"
                 subtitle="vs total activos"
             />
             <KPICard
-                title="Empresas Activas"
-                :value="stats.active_clients.toLocaleString()"
-                :icon="Building2"
-                color="blue"
+                title="Incidencias Hoy"
+                :value="stats.today_incidents.toLocaleString()"
+                :icon="AlertTriangle"
+                :color="stats.today_incidents > 0 ? 'red' : 'green'"
+                subtitle="faltas + retardos"
             />
             <KPICard
                 title="Capturas Pendientes"

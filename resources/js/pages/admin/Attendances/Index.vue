@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { router, useForm } from '@inertiajs/vue3';
-import { Pencil, Trash2 } from '@lucide/vue';
+import { Pencil, Search, Trash2, X } from '@lucide/vue';
 import type {ColumnDef} from '@tanstack/vue-table';
-import { ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import AppDataTable from '@/components/AppDataTable.vue';
 import DatePicker from '@/components/DatePicker.vue';
 import FormActions from '@/components/FormActions.vue';
@@ -10,6 +10,7 @@ import FormDialogContent from '@/components/FormDialogContent.vue';
 import FormField from '@/components/FormField.vue';
 import FormTextarea from '@/components/FormTextarea.vue';
 import PageHeader from '@/components/PageHeader.vue';
+import SearchableSelect from '@/components/SearchableSelect.vue';
 import StatusBadge from '@/components/StatusBadge.vue';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -17,12 +18,13 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { usePermissions } from '@/composables/usePermissions';
+import { formatDateMx, formatShortDateMx } from '@/lib/formatters';
 import type { Attendance, Client, PaginatedData, ServicePoint } from '@/types/models';
 
 const props = defineProps<{
     attendances: PaginatedData<Attendance>;
     clients: Client[];
-    servicePoints: ServicePoint[];
+    servicePoints: (ServicePoint & { client_id: number })[];
     filters: Record<string, string | undefined>;
 }>();
 
@@ -85,10 +87,26 @@ return;
 
 const onPage = (p: number) => router.get('/asistencias', { ...props.filters, page: p }, { preserveState: true });
 
+type SelectModel = string | number | null;
+
 const filterDate = ref(props.filters.date ?? '');
-const filterClient = ref(props.filters.client_id ?? '');
-const filterSP = ref(props.filters.service_point_id ?? '');
-const filterStatus = ref(props.filters.status ?? '');
+const filterClient = ref<SelectModel>(props.filters.client_id ?? '');
+const filterSP = ref<SelectModel>(props.filters.service_point_id ?? '');
+const filterStatus = ref<SelectModel>(props.filters.status ?? '');
+const filterEmployeeSearch = ref(props.filters.employee_search ?? '');
+
+const STATUSES = ['presente', 'falta', 'descanso', 'permiso', 'incapacidad', 'retardo'];
+const clientOptions = computed(() => props.clients.map((c) => ({ value: c.id, label: c.name })));
+const servicePointOptions = computed(() =>
+    props.servicePoints
+        .filter((sp) => !filterClient.value || String(sp.client_id) === String(filterClient.value))
+        .map((sp) => ({ value: sp.id, label: sp.name })),
+);
+const statusOptions = computed(() => STATUSES.map((s) => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) })));
+
+const hasActiveFilters = computed(() => !!(
+    filterDate.value || filterClient.value || filterSP.value || filterStatus.value || filterEmployeeSearch.value
+));
 
 const applyFilters = () => {
     router.get('/asistencias', {
@@ -96,10 +114,26 @@ const applyFilters = () => {
         client_id: filterClient.value || undefined,
         service_point_id: filterSP.value || undefined,
         status: filterStatus.value || undefined,
+        employee_search: filterEmployeeSearch.value || undefined,
     }, { preserveState: true, replace: true });
 };
 
-const STATUSES = ['presente', 'falta', 'descanso', 'permiso', 'incapacidad', 'retardo'];
+watch([filterDate, filterClient, filterSP, filterStatus], applyFilters);
+
+let searchDebounce: ReturnType<typeof setTimeout>;
+watch(filterEmployeeSearch, () => {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(applyFilters, 400);
+});
+
+const clearFilters = () => {
+    filterDate.value = '';
+    filterClient.value = '';
+    filterSP.value = '';
+    filterStatus.value = '';
+    filterEmployeeSearch.value = '';
+    router.get('/asistencias', {}, { preserveState: true, replace: true });
+};
 
 const columns: ColumnDef<Attendance>[] = [
     { accessorKey: 'attendance_date', header: 'Fecha' },
@@ -117,39 +151,25 @@ const columns: ColumnDef<Attendance>[] = [
         <PageHeader title="Gestión de Asistencias" description="Consulta y corrección de registros de asistencia" />
 
         <!-- Filters -->
-        <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6 bg-muted/30 p-4 rounded-lg border">
-            <FormField label="Fecha" class="text-xs">
-                <DatePicker v-model="filterDate" placeholder="Todas las fechas" @update:model-value="applyFilters" />
-            </FormField>
-            <FormField label="Empresa" class="text-xs">
-                <Select :model-value="filterClient || '__all__'" @update:model-value="(v) => { filterClient = v === '__all__' ? '' : String(v); applyFilters(); }">
-                    <SelectTrigger class="w-full"><SelectValue placeholder="Todas" /></SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="__all__">Todas</SelectItem>
-                        <SelectItem v-for="c in clients" :key="c.id" :value="String(c.id)">{{ c.name }}</SelectItem>
-                    </SelectContent>
-                </Select>
-            </FormField>
-            <FormField label="Punto Servicio" class="text-xs">
-                <Select :model-value="filterSP || '__all__'" @update:model-value="(v) => { filterSP = v === '__all__' ? '' : String(v); applyFilters(); }">
-                    <SelectTrigger class="w-full"><SelectValue placeholder="Todos" /></SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="__all__">Todos</SelectItem>
-                        <SelectItem v-for="sp in servicePoints" :key="sp.id" :value="String(sp.id)">{{ sp.name }}</SelectItem>
-                    </SelectContent>
-                </Select>
-            </FormField>
-            <FormField label="Estado" class="text-xs">
-                <Select :model-value="filterStatus || '__all__'" @update:model-value="(v) => { filterStatus = v === '__all__' ? '' : String(v); applyFilters(); }">
-                    <SelectTrigger class="w-full"><SelectValue placeholder="Todos" /></SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="__all__">Todos</SelectItem>
-                        <SelectItem v-for="s in STATUSES" :key="s" :value="s">{{ s.charAt(0).toUpperCase() + s.slice(1) }}</SelectItem>
-                    </SelectContent>
-                </Select>
-            </FormField>
-            <div class="flex items-end">
-                <Button variant="outline" size="sm" class="w-full" @click="applyFilters">Filtrar</Button>
+        <div class="space-y-3 mb-6 bg-muted/30 p-4 rounded-lg border">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <FormField label="Fecha" class="text-xs">
+                    <DatePicker v-model="filterDate" placeholder="Todas las fechas" />
+                </FormField>
+                <SearchableSelect v-model="filterClient" :options="clientOptions" label="Empresa" placeholder="Todas" />
+                <SearchableSelect v-model="filterSP" :options="servicePointOptions" label="Punto de servicio" placeholder="Todos" />
+                <SearchableSelect v-model="filterStatus" :options="statusOptions" label="Estado" placeholder="Todos" />
+            </div>
+            <div class="flex flex-wrap items-end gap-3">
+                <FormField label="Buscar colaborador" class="flex-1 min-w-[220px]">
+                    <div class="relative">
+                        <Search class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input v-model="filterEmployeeSearch" placeholder="Nombre o número de empleado..." class="pl-9" />
+                    </div>
+                </FormField>
+                <Button v-if="hasActiveFilters" variant="ghost" size="sm" class="mb-2" @click="clearFilters">
+                    <X class="h-3.5 w-3.5 mr-1" /> Limpiar filtros
+                </Button>
             </div>
         </div>
 
@@ -162,6 +182,9 @@ const columns: ColumnDef<Attendance>[] = [
             empty-description="No hay asistencias con los filtros seleccionados."
             @page-change="onPage"
         >
+            <template #cell-attendance_date="{ value }">
+                <span class="text-sm">{{ formatShortDateMx(value as string) }}</span>
+            </template>
             <template #cell-employee="{ item }">
                 <div class="font-medium text-sm">{{ item.employee?.name }} {{ item.employee?.last_name }}</div>
                 <div class="text-xs text-muted-foreground font-mono">{{ item.employee?.employee_number }}</div>
@@ -188,7 +211,7 @@ const columns: ColumnDef<Attendance>[] = [
                 <DialogHeader>
                     <DialogTitle>Corregir Asistencia</DialogTitle>
                     <DialogDescription>
-                        {{ correctingAttendance?.employee?.name }} {{ correctingAttendance?.employee?.last_name }} — {{ correctingAttendance?.attendance_date }}
+                        {{ correctingAttendance?.employee?.name }} {{ correctingAttendance?.employee?.last_name }} — {{ formatDateMx(correctingAttendance?.attendance_date) }}
                     </DialogDescription>
                 </DialogHeader>
                 <form @submit.prevent="submitCorrect" class="space-y-4">

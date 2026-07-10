@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { router, useForm } from '@inertiajs/vue3';
-import { MapPin, Pencil, Plus, Trash2 } from '@lucide/vue';
+import { MapPin, Pencil, Plus, Trash2, X } from '@lucide/vue';
 import type {ColumnDef} from '@tanstack/vue-table';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import AppDataTable from '@/components/AppDataTable.vue';
 import DeleteDialog from '@/components/DeleteDialog.vue';
 import FormActions from '@/components/FormActions.vue';
@@ -11,11 +11,12 @@ import FormInput from '@/components/FormInput.vue';
 import FormSelect from '@/components/FormSelect.vue';
 import FormTextarea from '@/components/FormTextarea.vue';
 import PageHeader from '@/components/PageHeader.vue';
+import SearchableSelect from '@/components/SearchableSelect.vue';
 import StatusBadge from '@/components/StatusBadge.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SelectItem } from '@/components/ui/select';
 import { usePermissions } from '@/composables/usePermissions';
 import type { Client, PaginatedData, ServicePoint } from '@/types/models';
 
@@ -85,7 +86,22 @@ return;
 
 const onSearch = (q: string) => router.get('/puntos-servicio', { ...props.filters, search: q }, { preserveState: true, replace: true });
 const onPage = (p: number) => router.get('/puntos-servicio', { ...props.filters, page: p }, { preserveState: true });
-const onClientFilter = (v: string) => router.get('/puntos-servicio', { ...props.filters, client_id: v === '__all__' ? undefined : v }, { preserveState: true });
+
+const clientOptions = computed(() => props.clients.map((c) => ({ value: c.id, label: c.name })));
+const clientIdModel = computed({
+    get: () => (form.client_id ? form.client_id : null),
+    set: (v: string | number | null) => {
+        form.client_id = v == null ? '' : String(v);
+    },
+});
+const filterClientId = computed({
+    get: () => props.filters.client_id ?? null,
+    set: (v: string | number | null) => {
+        router.get('/puntos-servicio', { ...props.filters, client_id: v == null ? undefined : String(v) }, { preserveState: true, replace: true });
+    },
+});
+const hasActiveFilters = computed(() => !!(props.filters.search || props.filters.client_id));
+const clearFilters = () => router.get('/puntos-servicio', {}, { preserveState: true, replace: true });
 
 const columns: ColumnDef<ServicePointRow>[] = [
     { accessorKey: 'name', header: 'Nombre' },
@@ -118,13 +134,10 @@ const columns: ColumnDef<ServicePointRow>[] = [
             @page-change="onPage"
         >
             <template #filters>
-                <Select :model-value="filters.client_id ?? '__all__'" @update:model-value="(v) => onClientFilter(String(v))">
-                    <SelectTrigger class="w-56"><SelectValue placeholder="Filtrar por empresa..." /></SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="__all__">Todas las empresas</SelectItem>
-                        <SelectItem v-for="c in clients" :key="c.id" :value="String(c.id)">{{ c.name }}</SelectItem>
-                    </SelectContent>
-                </Select>
+                <SearchableSelect v-model="filterClientId" :options="clientOptions" placeholder="Filtrar por empresa..." class="w-56" />
+                <Button v-if="hasActiveFilters" variant="ghost" size="sm" @click="clearFilters">
+                    <X class="h-3.5 w-3.5 mr-1" /> Limpiar filtros
+                </Button>
             </template>
             <template #cell-employees_count="{ item }">
                 <Badge variant="secondary">{{ item.employees_count ?? 0 }}</Badge>
@@ -146,9 +159,15 @@ const columns: ColumnDef<ServicePointRow>[] = [
             <FormDialogContent class="max-w-md">
                 <DialogHeader><DialogTitle>{{ editingSP ? 'Editar Punto' : 'Nuevo Punto de Servicio' }}</DialogTitle></DialogHeader>
                 <form @submit.prevent="submit" class="space-y-4">
-                    <FormSelect v-model="form.client_id" label="Empresa" required placeholder="Selecciona empresa..." :error="form.errors.client_id">
-                        <SelectItem v-for="c in clients" :key="c.id" :value="String(c.id)">{{ c.name }}</SelectItem>
-                    </FormSelect>
+                    <SearchableSelect
+                        v-model="clientIdModel"
+                        :options="clientOptions"
+                        label="Empresa"
+                        required
+                        placeholder="Selecciona empresa..."
+                        :clearable="false"
+                        :error="form.errors.client_id"
+                    />
                     <FormInput v-model="form.name" label="Nombre" required placeholder="Ej. Planta Norte - Turno A" :error="form.errors.name" />
                     <FormTextarea v-model="form.address" label="Dirección" placeholder="Dirección completa (opcional)" :rows="2" :error="form.errors.address" />
                     <FormSelect v-model="form.status" label="Estado" required :error="form.errors.status">

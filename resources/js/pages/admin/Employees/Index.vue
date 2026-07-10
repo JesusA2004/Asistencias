@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { router, useForm } from '@inertiajs/vue3';
-import { HardHat, Pencil, Plus, Trash2, Upload } from '@lucide/vue';
+import { HardHat, Pencil, Plus, Trash2, Upload, X } from '@lucide/vue';
 import type {ColumnDef} from '@tanstack/vue-table';
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import AppDataTable from '@/components/AppDataTable.vue';
 import DeleteDialog from '@/components/DeleteDialog.vue';
@@ -12,11 +12,12 @@ import FormField from '@/components/FormField.vue';
 import FormInput from '@/components/FormInput.vue';
 import FormSelect from '@/components/FormSelect.vue';
 import PageHeader from '@/components/PageHeader.vue';
+import SearchableSelect from '@/components/SearchableSelect.vue';
 import StatusBadge from '@/components/StatusBadge.vue';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SelectItem } from '@/components/ui/select';
 import { usePermissions } from '@/composables/usePermissions';
 import type { Client, Employee, PaginatedData, ServicePoint, Shift } from '@/types/models';
 
@@ -158,6 +159,49 @@ const onPage = (p: number) => router.get('/colaboradores', { ...props.filters, p
 
 const filteredSPs = (clientId: string) => props.servicePoints.filter((sp) => clientId === '__none__' || sp.client_id === Number(clientId));
 
+const clientOptions = computed(() => props.clients.map((c) => ({ value: c.id, label: c.name })));
+const shiftOptions = computed(() => props.shifts.map((s) => ({ value: s.id, label: s.name })));
+const formServicePointOptions = computed(() => filteredSPs(form.client_id).map((sp) => ({ value: sp.id, label: sp.name })));
+
+const clientIdModel = computed({
+    get: () => (form.client_id === '__none__' ? null : form.client_id),
+    set: (v: string | number | null) => {
+        form.client_id = v == null ? '__none__' : String(v);
+    },
+});
+const servicePointIdModel = computed({
+    get: () => (form.service_point_id === '__none__' ? null : form.service_point_id),
+    set: (v: string | number | null) => {
+        form.service_point_id = v == null ? '__none__' : String(v);
+    },
+});
+const shiftIdModel = computed({
+    get: () => (form.shift_id === '__none__' ? null : form.shift_id),
+    set: (v: string | number | null) => {
+        form.shift_id = v == null ? '__none__' : String(v);
+    },
+});
+
+const filterClientId = computed({
+    get: () => props.filters.client_id ?? null,
+    set: (v: string | number | null) => {
+        router.get('/colaboradores', { ...props.filters, client_id: v == null ? undefined : String(v) }, { preserveState: true, replace: true });
+    },
+});
+const filterStatus = computed({
+    get: () => props.filters.status ?? null,
+    set: (v: string | number | null) => {
+        router.get('/colaboradores', { ...props.filters, status: v == null ? undefined : String(v) }, { preserveState: true, replace: true });
+    },
+});
+const statusFilterOptions = [
+    { value: 'activo', label: 'Activo' },
+    { value: 'inactivo', label: 'Inactivo' },
+    { value: 'baja', label: 'Baja' },
+];
+const hasActiveFilters = computed(() => !!(props.filters.search || props.filters.client_id || props.filters.status));
+const clearFilters = () => router.get('/colaboradores', {}, { preserveState: true, replace: true });
+
 const columns: ColumnDef<Employee>[] = [
     { accessorKey: 'employee_number', header: 'No. Emp' },
     { accessorKey: 'name', header: 'Nombre' },
@@ -193,22 +237,11 @@ const columns: ColumnDef<Employee>[] = [
             @page-change="onPage"
         >
             <template #filters>
-                <Select :model-value="filters.client_id ?? '__all__'" @update:model-value="(v) => router.get('/colaboradores', { ...filters, client_id: String(v) === '__all__' ? undefined : String(v) }, { preserveState: true })">
-                    <SelectTrigger class="w-48"><SelectValue placeholder="Empresa..." /></SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="__all__">Todas</SelectItem>
-                        <SelectItem v-for="c in clients" :key="c.id" :value="String(c.id)">{{ c.name }}</SelectItem>
-                    </SelectContent>
-                </Select>
-                <Select :model-value="filters.status ?? '__all__'" @update:model-value="(v) => router.get('/colaboradores', { ...filters, status: String(v) === '__all__' ? undefined : String(v) }, { preserveState: true })">
-                    <SelectTrigger class="w-36"><SelectValue placeholder="Estado..." /></SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="__all__">Todos</SelectItem>
-                        <SelectItem value="activo">Activo</SelectItem>
-                        <SelectItem value="inactivo">Inactivo</SelectItem>
-                        <SelectItem value="baja">Baja</SelectItem>
-                    </SelectContent>
-                </Select>
+                <SearchableSelect v-model="filterClientId" :options="clientOptions" placeholder="Empresa..." class="w-48" />
+                <SearchableSelect v-model="filterStatus" :options="statusFilterOptions" placeholder="Estado..." class="w-40" />
+                <Button v-if="hasActiveFilters" variant="ghost" size="sm" @click="clearFilters">
+                    <X class="h-3.5 w-3.5 mr-1" /> Limpiar filtros
+                </Button>
             </template>
             <template #cell-name="{ item }">
                 <div class="font-medium">{{ item.name }} {{ item.last_name }}</div>
@@ -246,25 +279,29 @@ const columns: ColumnDef<Employee>[] = [
                             <SelectItem value="inactivo">Inactivo</SelectItem>
                             <SelectItem value="baja">Baja</SelectItem>
                         </FormSelect>
-                        <FormSelect v-model="form.client_id" label="Empresa" placeholder="Selecciona..." :error="form.errors.client_id">
-                            <SelectItem value="__none__">Sin asignar</SelectItem>
-                            <SelectItem v-for="c in clients" :key="c.id" :value="String(c.id)">{{ c.name }}</SelectItem>
-                        </FormSelect>
-                        <FormSelect
-                            v-model="form.service_point_id"
+                        <SearchableSelect
+                            v-model="clientIdModel"
+                            :options="clientOptions"
+                            label="Empresa"
+                            placeholder="Sin asignar"
+                            :error="form.errors.client_id"
+                        />
+                        <SearchableSelect
+                            v-model="servicePointIdModel"
+                            :options="formServicePointOptions"
                             label="Punto de Servicio"
-                            placeholder="Selecciona..."
+                            placeholder="Sin asignar"
                             :disabled="form.client_id === '__none__'"
                             :hint="form.client_id === '__none__' ? 'Selecciona una empresa primero.' : undefined"
                             :error="form.errors.service_point_id"
-                        >
-                            <SelectItem value="__none__">Sin asignar</SelectItem>
-                            <SelectItem v-for="sp in filteredSPs(form.client_id)" :key="sp.id" :value="String(sp.id)">{{ sp.name }}</SelectItem>
-                        </FormSelect>
-                        <FormSelect v-model="form.shift_id" label="Turno" placeholder="Selecciona..." :error="form.errors.shift_id">
-                            <SelectItem value="__none__">Sin turno</SelectItem>
-                            <SelectItem v-for="s in shifts" :key="s.id" :value="String(s.id)">{{ s.name }}</SelectItem>
-                        </FormSelect>
+                        />
+                        <SearchableSelect
+                            v-model="shiftIdModel"
+                            :options="shiftOptions"
+                            label="Turno"
+                            placeholder="Sin turno"
+                            :error="form.errors.shift_id"
+                        />
                     </div>
                     <FormActions :processing="form.processing" @cancel="showModal = false" />
                 </form>

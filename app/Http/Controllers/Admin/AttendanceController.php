@@ -42,9 +42,7 @@ class AttendanceController extends Controller
         return Inertia::render('admin/Attendances/Index', [
             'attendances' => $query,
             'clients' => Client::where('status', 'activo')->orderBy('name')->get(['id', 'name']),
-            'servicePoints' => $request->client_id
-                ? ServicePoint::where('client_id', $request->client_id)->orderBy('name')->get(['id', 'name'])
-                : [],
+            'servicePoints' => ServicePoint::where('status', 'activo')->orderBy('name')->get(['id', 'client_id', 'name']),
             'filters' => $request->only(['date', 'client_id', 'service_point_id', 'status', 'supervisor_id', 'employee_search']),
         ]);
     }

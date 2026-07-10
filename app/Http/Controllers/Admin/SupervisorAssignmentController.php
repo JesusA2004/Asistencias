@@ -22,6 +22,7 @@ class SupervisorAssignmentController extends Controller
             ->with(['supervisor:id,name,email', 'client:id,name', 'servicePoint:id,name'])
             ->when($request->supervisor_id, fn ($q, $s) => $q->where('supervisor_user_id', $s))
             ->when($request->client_id, fn ($q, $c) => $q->where('client_id', $c))
+            ->when($request->service_point_id, fn ($q, $sp) => $q->where('service_point_id', $sp))
             ->orderByDesc('created_at')
             ->paginate(20)
             ->withQueryString();
@@ -35,7 +36,7 @@ class SupervisorAssignmentController extends Controller
             'supervisors' => $supervisors,
             'clients' => $clients,
             'servicePoints' => $servicePoints,
-            'filters' => $request->only(['supervisor_id', 'client_id']),
+            'filters' => $request->only(['supervisor_id', 'client_id', 'service_point_id']),
         ]);
     }
 

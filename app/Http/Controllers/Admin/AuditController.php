@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\AttendanceAudit;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -30,6 +31,9 @@ class AuditController extends Controller
 
         return Inertia::render('admin/Audit/Index', [
             'audits' => $audits,
+            'users' => User::whereIn('id', AttendanceAudit::query()->select('changed_by')->distinct())
+                ->orderBy('name')
+                ->get(['id', 'name']),
             'filters' => $request->only(['action', 'changed_by', 'date_from', 'date_to']),
         ]);
     }

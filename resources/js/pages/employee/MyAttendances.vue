@@ -8,6 +8,7 @@ import StatusBadge from '@/components/StatusBadge.vue';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { formatDateMx } from '@/lib/formatters';
 import type { Attendance, Employee } from '@/types/models';
 
 const props = defineProps<{
@@ -99,7 +100,7 @@ const STATUS_ICONS: Record<string, string> = {
                             <div class="flex items-center gap-4">
                                 <div class="w-8 text-lg text-center">{{ STATUS_ICONS[a.status] ?? '—' }}</div>
                                 <div>
-                                    <p class="font-medium text-sm">{{ a.attendance_date }}</p>
+                                    <p class="font-medium text-sm">{{ formatDateMx(a.attendance_date) }}</p>
                                     <p class="text-xs text-muted-foreground">
                                         {{ a.service_point?.name ?? '—' }}
                                     </p>

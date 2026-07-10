@@ -173,6 +173,7 @@ class DashboardController extends Controller
                 'compliance_percentage' => $compliance,
                 'active_clients' => Client::where('status', 'activo')->count(),
                 'pending_captures' => max(0, $totalEmployees - $todayTotal),
+                'today_incidents' => $todayAbsent + $todayLate,
             ],
             'chart_daily' => $last30Days,
             'chart_absents_by_client' => $absentByClient,

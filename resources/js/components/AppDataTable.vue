@@ -96,58 +96,98 @@ const totalColumns = () => props.columns.length + (slots.actions ? 1 : 0);
             <slot name="filters" />
         </div>
 
-        <div class="rounded-lg border bg-card overflow-hidden">
-            <Table>
-                <TableHeader>
-                    <TableRow v-for="headerGroup in table.getHeaderGroups()" :key="headerGroup.id" class="bg-muted/30">
-                        <TableHead
-                            v-for="header in headerGroup.headers"
-                            :key="header.id"
-                            class="font-semibold text-xs uppercase tracking-wider text-muted-foreground"
-                        >
-                            <FlexRender
-                                v-if="!header.isPlaceholder"
-                                :render="header.column.columnDef.header"
-                                :props="header.getContext()"
-                            />
-                        </TableHead>
-                        <TableHead v-if="$slots.actions" class="w-px text-right text-xs uppercase tracking-wider text-muted-foreground font-semibold">
-                            {{ actionsLabel }}
-                        </TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    <template v-if="loading">
-                        <TableRow v-for="i in 8" :key="i">
-                            <TableCell v-for="ci in totalColumns()" :key="ci" class="py-3">
-                                <Skeleton class="h-4 w-full" />
+        <!-- Desktop: tabla -->
+        <div class="hidden md:block rounded-lg border bg-card overflow-hidden">
+            <div :class="{ 'overflow-x-auto': columns.length > 6 }">
+                <Table>
+                    <TableHeader>
+                        <TableRow v-for="headerGroup in table.getHeaderGroups()" :key="headerGroup.id" class="bg-muted/30">
+                            <TableHead
+                                v-for="header in headerGroup.headers"
+                                :key="header.id"
+                                class="font-semibold text-xs uppercase tracking-wider text-muted-foreground"
+                            >
+                                <FlexRender
+                                    v-if="!header.isPlaceholder"
+                                    :render="header.column.columnDef.header"
+                                    :props="header.getContext()"
+                                />
+                            </TableHead>
+                            <TableHead v-if="$slots.actions" class="w-px text-right text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                                {{ actionsLabel }}
+                            </TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        <template v-if="loading">
+                            <TableRow v-for="i in 8" :key="i">
+                                <TableCell v-for="ci in totalColumns()" :key="ci" class="py-3">
+                                    <Skeleton class="h-4 w-full" />
+                                </TableCell>
+                            </TableRow>
+                        </template>
+                        <template v-else-if="table.getRowModel().rows.length">
+                            <TableRow
+                                v-for="row in table.getRowModel().rows"
+                                :key="row.id"
+                                class="hover:bg-muted/40 transition-colors"
+                            >
+                                <TableCell v-for="cell in row.getVisibleCells()" :key="cell.id" class="py-3">
+                                    <slot v-if="$slots[`cell-${cell.column.id}`]" :name="`cell-${cell.column.id}`" :item="row.original" :value="cell.getValue()" />
+                                    <FlexRender v-else :render="cell.column.columnDef.cell" :props="cell.getContext()" />
+                                </TableCell>
+                                <TableCell v-if="$slots.actions" class="py-3">
+                                    <div class="flex items-center justify-end gap-1">
+                                        <slot name="actions" :item="row.original" />
+                                    </div>
+                                </TableCell>
+                            </TableRow>
+                        </template>
+                        <TableRow v-else>
+                            <TableCell :colspan="totalColumns()" class="h-48 p-0">
+                                <EmptyState :title="emptyTitle" :description="emptyDescription" :icon="emptyIcon" />
                             </TableCell>
                         </TableRow>
-                    </template>
-                    <template v-else-if="table.getRowModel().rows.length">
-                        <TableRow
-                            v-for="row in table.getRowModel().rows"
-                            :key="row.id"
-                            class="hover:bg-muted/40 transition-colors"
+                    </TableBody>
+                </Table>
+            </div>
+        </div>
+
+        <!-- Mobile/tablet: cards -->
+        <div class="md:hidden space-y-3">
+            <template v-if="loading">
+                <div v-for="i in 4" :key="i" class="rounded-lg border bg-card p-4 space-y-2">
+                    <Skeleton class="h-4 w-2/3" />
+                    <Skeleton class="h-3 w-1/2" />
+                </div>
+            </template>
+            <template v-else-if="table.getRowModel().rows.length">
+                <template v-for="row in table.getRowModel().rows" :key="row.id">
+                    <slot v-if="$slots['mobile-card']" name="mobile-card" :item="row.original" />
+                    <div
+                        v-else
+                        class="rounded-lg border bg-card p-4 shadow-sm hover:shadow-md transition-all space-y-2"
+                    >
+                        <div
+                            v-for="(cell, ci) in row.getVisibleCells()"
+                            :key="cell.id"
+                            :class="ci === 0 ? 'font-medium text-sm' : 'flex items-center justify-between gap-2 text-sm'"
                         >
-                            <TableCell v-for="cell in row.getVisibleCells()" :key="cell.id" class="py-3">
+                            <span v-if="ci !== 0" class="text-xs text-muted-foreground uppercase tracking-wide shrink-0">
+                                {{ typeof cell.column.columnDef.header === 'string' ? cell.column.columnDef.header : cell.column.id }}
+                            </span>
+                            <span class="min-w-0 text-right" :class="{ 'text-left w-full': ci === 0 }">
                                 <slot v-if="$slots[`cell-${cell.column.id}`]" :name="`cell-${cell.column.id}`" :item="row.original" :value="cell.getValue()" />
                                 <FlexRender v-else :render="cell.column.columnDef.cell" :props="cell.getContext()" />
-                            </TableCell>
-                            <TableCell v-if="$slots.actions" class="py-3">
-                                <div class="flex items-center justify-end gap-1">
-                                    <slot name="actions" :item="row.original" />
-                                </div>
-                            </TableCell>
-                        </TableRow>
-                    </template>
-                    <TableRow v-else>
-                        <TableCell :colspan="totalColumns()" class="h-48 p-0">
-                            <EmptyState :title="emptyTitle" :description="emptyDescription" :icon="emptyIcon" />
-                        </TableCell>
-                    </TableRow>
-                </TableBody>
-            </Table>
+                            </span>
+                        </div>
+                        <div v-if="$slots.actions" class="flex items-center justify-end gap-1 pt-2 border-t mt-2">
+                            <slot name="actions" :item="row.original" />
+                        </div>
+                    </div>
+                </template>
+            </template>
+            <EmptyState v-else :title="emptyTitle" :description="emptyDescription" :icon="emptyIcon" />
         </div>
 
         <div v-if="pagination && pagination.last_page > 1" class="flex items-center justify-between text-sm">

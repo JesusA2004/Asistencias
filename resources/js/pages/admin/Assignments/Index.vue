@@ -1,25 +1,27 @@
 <script setup lang="ts">
 import { router, useForm } from '@inertiajs/vue3';
-import { Plus, Trash2, UserCheck } from '@lucide/vue';
+import { Plus, Trash2, UserCheck, X } from '@lucide/vue';
 import type {ColumnDef} from '@tanstack/vue-table';
-import { ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import AppDataTable from '@/components/AppDataTable.vue';
 import DeleteDialog from '@/components/DeleteDialog.vue';
 import FormActions from '@/components/FormActions.vue';
 import FormDialogContent from '@/components/FormDialogContent.vue';
-import FormSelect from '@/components/FormSelect.vue';
 import PageHeader from '@/components/PageHeader.vue';
+import SearchableSelect from '@/components/SearchableSelect.vue';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { SelectItem } from '@/components/ui/select';
 import { usePermissions } from '@/composables/usePermissions';
+import { formatDateTimeMx } from '@/lib/formatters';
 import type { AppUser, Client, PaginatedData, ServicePoint, SupervisorAssignment } from '@/types/models';
+
+type SelectModel = string | number | null;
 
 const props = defineProps<{
     assignments: PaginatedData<SupervisorAssignment>;
-    supervisors: AppUser[];
+    supervisors: (AppUser & { email: string })[];
     clients: Client[];
-    servicePoints: ServicePoint[];
+    servicePoints: (ServicePoint & { client_id: number })[];
     filters: Record<string, string | undefined>;
 }>();
 
@@ -42,7 +44,7 @@ const openCreate = () => {
 const submit = () => {
     form.post('/asignaciones', {
         onSuccess: () => {
- showModal.value = false; form.reset(); 
+ showModal.value = false; form.reset();
 },
     });
 };
@@ -53,13 +55,63 @@ return;
 }
 
     router.delete(`/asignaciones/${deleteId.value}`, { onFinish: () => {
- deleteId.value = null; 
+ deleteId.value = null;
 } });
 };
 
 const filteredSPs = (clientId: string) => props.servicePoints.filter((sp) => !clientId || sp.client_id === Number(clientId));
 
 const onPage = (p: number) => router.get('/asignaciones', { ...props.filters, page: p }, { preserveState: true });
+
+const supervisorOptions = computed(() => props.supervisors.map((s) => ({ value: s.id, label: s.name, description: s.email })));
+const clientOptions = computed(() => props.clients.map((c) => ({ value: c.id, label: c.name })));
+
+const supervisorIdModel = computed({
+    get: () => (form.supervisor_user_id ? form.supervisor_user_id : null),
+    set: (v: SelectModel) => {
+        form.supervisor_user_id = v == null ? '' : String(v);
+    },
+});
+const clientIdModel = computed({
+    get: () => (form.client_id ? form.client_id : null),
+    set: (v: SelectModel) => {
+        form.client_id = v == null ? '' : String(v);
+        form.service_point_id = '';
+    },
+});
+const servicePointIdModel = computed({
+    get: () => (form.service_point_id ? form.service_point_id : null),
+    set: (v: SelectModel) => {
+        form.service_point_id = v == null ? '' : String(v);
+    },
+});
+const formServicePointOptions = computed(() => filteredSPs(form.client_id).map((sp) => ({ value: sp.id, label: sp.name })));
+
+// Filtros de la tabla
+const filterSupervisor = ref<SelectModel>(props.filters.supervisor_id ?? '');
+const filterClient = ref<SelectModel>(props.filters.client_id ?? '');
+const filterSP = ref<SelectModel>(props.filters.service_point_id ?? '');
+const filterServicePointOptions = computed(() =>
+    props.servicePoints
+        .filter((sp) => !filterClient.value || String(sp.client_id) === String(filterClient.value))
+        .map((sp) => ({ value: sp.id, label: sp.name })),
+);
+const hasActiveFilters = computed(() => !!(filterSupervisor.value || filterClient.value || filterSP.value));
+
+watch([filterSupervisor, filterClient, filterSP], () => {
+    router.get('/asignaciones', {
+        supervisor_id: filterSupervisor.value || undefined,
+        client_id: filterClient.value || undefined,
+        service_point_id: filterSP.value || undefined,
+    }, { preserveState: true, replace: true });
+});
+
+const clearFilters = () => {
+    filterSupervisor.value = '';
+    filterClient.value = '';
+    filterSP.value = '';
+    router.get('/asignaciones', {}, { preserveState: true, replace: true });
+};
 
 const columns: ColumnDef<SupervisorAssignment>[] = [
     { accessorKey: 'supervisor', header: 'Supervisor', cell: ({ row }) => row.original.supervisor?.name },
@@ -90,12 +142,20 @@ const columns: ColumnDef<SupervisorAssignment>[] = [
             :empty-icon="UserCheck"
             @page-change="onPage"
         >
+            <template #filters>
+                <SearchableSelect v-model="filterSupervisor" :options="supervisorOptions" placeholder="Supervisor..." class="w-52" />
+                <SearchableSelect v-model="filterClient" :options="clientOptions" placeholder="Empresa..." class="w-48" />
+                <SearchableSelect v-model="filterSP" :options="filterServicePointOptions" placeholder="Punto de servicio..." class="w-52" />
+                <Button v-if="hasActiveFilters" variant="ghost" size="sm" @click="clearFilters">
+                    <X class="h-3.5 w-3.5 mr-1" /> Limpiar filtros
+                </Button>
+            </template>
             <template #cell-service_point="{ item }">
                 <span v-if="item.service_point?.name">{{ item.service_point.name }}</span>
                 <span v-else class="text-muted-foreground italic">Todas las ubicaciones</span>
             </template>
             <template #cell-created_at="{ value }">
-                <span class="text-xs text-muted-foreground">{{ value }}</span>
+                <span class="text-xs text-muted-foreground">{{ formatDateTimeMx(value as string) }}</span>
             </template>
             <template #actions="{ item }">
                 <Button
@@ -113,29 +173,32 @@ const columns: ColumnDef<SupervisorAssignment>[] = [
             <FormDialogContent class="max-w-md">
                 <DialogHeader><DialogTitle>Nueva Asignación</DialogTitle></DialogHeader>
                 <form @submit.prevent="submit" class="space-y-4">
-                    <FormSelect v-model="form.supervisor_user_id" label="Supervisor" required placeholder="Selecciona supervisor..." :error="form.errors.supervisor_user_id">
-                        <SelectItem v-for="s in supervisors" :key="s.id" :value="String(s.id)">{{ s.name }} ({{ s.email }})</SelectItem>
-                    </FormSelect>
-                    <FormSelect
-                        v-model="form.client_id"
+                    <SearchableSelect
+                        v-model="supervisorIdModel"
+                        :options="supervisorOptions"
+                        label="Supervisor"
+                        required
+                        placeholder="Selecciona supervisor..."
+                        :clearable="false"
+                        :error="form.errors.supervisor_user_id"
+                    />
+                    <SearchableSelect
+                        v-model="clientIdModel"
+                        :options="clientOptions"
                         label="Empresa"
                         required
                         placeholder="Selecciona empresa..."
+                        :clearable="false"
                         :error="form.errors.client_id"
-                        @update:model-value="form.service_point_id = ''"
-                    >
-                        <SelectItem v-for="c in clients" :key="c.id" :value="String(c.id)">{{ c.name }}</SelectItem>
-                    </FormSelect>
-                    <FormSelect
-                        :model-value="form.service_point_id || '__all__'"
+                    />
+                    <SearchableSelect
+                        v-model="servicePointIdModel"
+                        :options="formServicePointOptions"
                         label="Punto de Servicio (opcional)"
                         :disabled="!form.client_id"
                         placeholder="Todos los puntos (sin especificar)"
-                        @update:model-value="(v) => form.service_point_id = v === '__all__' ? '' : v"
-                    >
-                        <SelectItem value="__all__">Todos los puntos</SelectItem>
-                        <SelectItem v-for="sp in filteredSPs(form.client_id)" :key="sp.id" :value="String(sp.id)">{{ sp.name }}</SelectItem>
-                    </FormSelect>
+                        :hint="!form.client_id ? 'Selecciona una empresa primero.' : undefined"
+                    />
                     <FormActions submit-label="Asignar" processing-label="Asignando..." :processing="form.processing" @cancel="showModal = false" />
                 </form>
             </FormDialogContent>

@@ -157,6 +157,7 @@ export interface DashboardAdminStats {
     compliance_percentage: number;
     active_clients: number;
     pending_captures: number;
+    today_incidents: number;
 }
 
 export interface DashboardSupervisorStats {

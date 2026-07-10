@@ -17,7 +17,7 @@ class Attendance extends Model
     protected function casts(): array
     {
         return [
-            'attendance_date' => 'date',
+            'attendance_date' => 'date:Y-m-d',
         ];
     }
 

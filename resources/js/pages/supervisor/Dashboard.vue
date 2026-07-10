@@ -7,6 +7,7 @@ import KPICard from '@/components/KPICard.vue';
 import StatusBadge from '@/components/StatusBadge.vue';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { formatDateMx } from '@/lib/formatters';
 import type { Attendance, DashboardSupervisorStats } from '@/types/models';
 
 const props = defineProps<{
@@ -138,7 +139,7 @@ const chartOptions = computed(() => ({
                     >
                         <div class="min-w-0">
                             <p class="text-sm font-medium truncate">{{ c.employee?.name }} {{ c.employee?.last_name }}</p>
-                            <p class="text-xs text-muted-foreground truncate">{{ c.service_point?.name }} — {{ c.attendance_date }}</p>
+                            <p class="text-xs text-muted-foreground truncate">{{ c.service_point?.name }} — {{ formatDateMx(c.attendance_date) }}</p>
                         </div>
                         <StatusBadge :status="c.status" />
                     </div>

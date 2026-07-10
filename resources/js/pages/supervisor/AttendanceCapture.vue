@@ -1,30 +1,41 @@
 <script setup lang="ts">
 import { router, useForm } from '@inertiajs/vue3';
-import { CheckCircle2, ClipboardList, Save } from '@lucide/vue';
-import { ref, computed } from 'vue';
+import { CheckCircle2, ClipboardList, Save, Users, X } from '@lucide/vue';
+import { computed, ref, watch } from 'vue';
 import DatePicker from '@/components/DatePicker.vue';
 import FormField from '@/components/FormField.vue';
 import PageHeader from '@/components/PageHeader.vue';
+import SearchableMultiSelect from '@/components/SearchableMultiSelect.vue';
+import SearchableSelect from '@/components/SearchableSelect.vue';
 import StatusBadge from '@/components/StatusBadge.vue';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { formatDateMx } from '@/lib/formatters';
 import type { Attendance, AttendanceStatus, Client, Employee, ServicePoint } from '@/types/models';
 
 const props = defineProps<{
     clients: Client[];
-    servicePoints: ServicePoint[];
+    servicePoints: (ServicePoint & { client_id: number })[];
     employees: Employee[];
     existingAttendances: Record<number, Attendance>;
     filters: { client_id?: string; service_point_id?: string; date?: string };
-    alreadySaved: boolean;
 }>();
 
 const today = new Date().toISOString().split('T')[0];
 const selectedClient = ref(props.filters.client_id ?? '');
 const selectedSP = ref(props.filters.service_point_id ?? '');
 const selectedDate = ref(props.filters.date ?? today);
+
+// Los puntos de servicio ya vienen todos cargados desde el backend; se filtran
+// aquí por empresa sin recargar la página (instantáneo, no se siente lento).
+const filteredServicePoints = computed(() =>
+    props.servicePoints.filter((sp) => !selectedClient.value || String(sp.client_id) === String(selectedClient.value)),
+);
+
+const clientOptions = computed(() => props.clients.map((c) => ({ value: c.id, label: c.name })));
+const servicePointOptions = computed(() => filteredServicePoints.value.map((sp) => ({ value: sp.id, label: sp.name })));
 
 const STATUSES: { value: AttendanceStatus; label: string; color: string; activeColor: string }[] = [
     { value: 'presente', label: 'Presente', color: 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100 dark:bg-green-950/40 dark:text-green-400 dark:border-green-900', activeColor: 'bg-green-600 text-white border-green-600 hover:bg-green-600' },
@@ -43,20 +54,68 @@ interface RecordEntry {
     notes: string;
 }
 
-const records = ref<RecordEntry[]>(
-    props.employees.map((e) => ({
-        employee_id: e.id,
-        status: 'presente' as AttendanceStatus,
-        entry_time: '',
-        exit_time: '',
-        notes: '',
-    }))
+// Colaboradores que el supervisor eligió agregar a la lista de captura.
+const selectedEmployeeIds = ref<number[]>([]);
+const records = ref<Map<number, RecordEntry>>(new Map());
+
+const isAlreadySaved = (employeeId: number) => !!props.existingAttendances[employeeId];
+const savedStatus = (employeeId: number) => props.existingAttendances[employeeId]?.status;
+
+const employeesById = computed(() => new Map(props.employees.map((e) => [e.id, e])));
+const alreadySavedEmployees = computed(() => props.employees.filter((e) => isAlreadySaved(e.id)));
+
+const employeeOptions = computed(() =>
+    props.employees
+        .filter((e) => !isAlreadySaved(e.id))
+        .map((e) => ({
+            value: e.id,
+            label: `${e.name} ${e.last_name}`,
+            description: e.employee_number,
+        })),
 );
 
-const applyToAll = (status: AttendanceStatus) => {
-    records.value.forEach((r) => {
- r.status = status; 
-});
+// Mantiene `records` sincronizado con la selección de colaboradores, sin perder
+// lo ya capturado para los que siguen seleccionados.
+watch(selectedEmployeeIds, (ids) => {
+    const next = new Map<number, RecordEntry>();
+    for (const id of ids) {
+        next.set(id, records.value.get(id) ?? {
+            employee_id: id,
+            status: 'presente',
+            entry_time: '',
+            exit_time: '',
+            notes: '',
+        });
+    }
+    records.value = next;
+}, { deep: false });
+
+const recordList = computed(() => selectedEmployeeIds.value.map((id) => records.value.get(id)!).filter(Boolean));
+
+const addAllFromPoint = () => {
+    const allIds = props.employees.filter((e) => !isAlreadySaved(e.id)).map((e) => e.id);
+    selectedEmployeeIds.value = Array.from(new Set([...selectedEmployeeIds.value, ...allIds]));
+};
+
+const clearSelection = () => {
+    selectedEmployeeIds.value = [];
+};
+
+const applyToSelected = (status: AttendanceStatus) => {
+    recordList.value.forEach((r) => {
+        r.status = status;
+    });
+};
+
+const applyToAllInPoint = (status: AttendanceStatus) => {
+    const allIds = props.employees.filter((e) => !isAlreadySaved(e.id)).map((e) => e.id);
+    const next = new Map<number, RecordEntry>();
+    for (const id of allIds) {
+        const existing = records.value.get(id);
+        next.set(id, existing ? { ...existing, status } : { employee_id: id, status, entry_time: '', exit_time: '', notes: '' });
+    }
+    records.value = next;
+    selectedEmployeeIds.value = allIds;
 };
 
 const form = useForm({
@@ -67,102 +126,155 @@ const form = useForm({
 });
 
 const loadEmployees = () => {
+    selectedEmployeeIds.value = [];
     router.get('/asistencias/capturar', {
-        client_id: selectedClient.value,
-        service_point_id: selectedSP.value,
+        client_id: selectedClient.value || undefined,
+        service_point_id: selectedSP.value || undefined,
         date: selectedDate.value,
-    }, { preserveState: false });
+    }, { preserveState: true, replace: true });
+};
+
+const onClientChange = (value: string | number | null) => {
+    selectedClient.value = value == null ? '' : String(value);
+    selectedSP.value = '';
+    loadEmployees();
+};
+
+const onServicePointChange = (value: string | number | null) => {
+    selectedSP.value = value == null ? '' : String(value);
+    loadEmployees();
+};
+
+const onDateChange = (value: string | null) => {
+    selectedDate.value = value ?? today;
+    loadEmployees();
 };
 
 const submit = () => {
     form.client_id = selectedClient.value;
     form.service_point_id = selectedSP.value;
     form.attendance_date = selectedDate.value;
-    form.records = records.value;
-    form.post('/asistencias/capturar');
+    form.records = recordList.value;
+    form.post('/asistencias/capturar', {
+        onSuccess: () => {
+            selectedEmployeeIds.value = [];
+        },
+    });
 };
-
-const isAlreadySaved = (employeeId: number) => !!props.existingAttendances[employeeId];
-const savedStatus = (employeeId: number) => props.existingAttendances[employeeId]?.status;
-
-const newCount = computed(() => records.value.filter((r) => !isAlreadySaved(r.employee_id)).length);
 </script>
 
 <template>
     <div class="p-6 max-w-5xl mx-auto">
         <PageHeader title="Capturar Asistencia" description="Registra la asistencia diaria de tus colaboradores">
             <template #actions>
-                <Button v-if="employees.length && !alreadySaved" @click="submit" :disabled="form.processing">
+                <Button v-if="recordList.length" @click="submit" :disabled="form.processing">
                     <Save class="h-4 w-4 mr-2" />
-                    {{ form.processing ? 'Guardando...' : `Guardar ${newCount} registros` }}
+                    {{ form.processing ? 'Guardando...' : `Guardar ${recordList.length} registros` }}
                 </Button>
             </template>
         </PageHeader>
 
-        <!-- Filtros -->
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 bg-muted/30 p-4 rounded-lg border">
-            <FormField label="Empresa" required>
-                <Select v-model="selectedClient" @update:model-value="selectedSP = ''; loadEmployees()">
-                    <SelectTrigger class="w-full"><SelectValue placeholder="Selecciona empresa..." /></SelectTrigger>
-                    <SelectContent>
-                        <SelectItem v-for="c in clients" :key="c.id" :value="String(c.id)">{{ c.name }}</SelectItem>
-                    </SelectContent>
-                </Select>
-            </FormField>
-            <FormField label="Punto de Servicio" required>
-                <Select v-model="selectedSP" :disabled="!servicePoints.length" @update:model-value="loadEmployees()">
-                    <SelectTrigger class="w-full"><SelectValue placeholder="Selecciona punto..." /></SelectTrigger>
-                    <SelectContent>
-                        <SelectItem v-for="sp in servicePoints" :key="sp.id" :value="String(sp.id)">{{ sp.name }}</SelectItem>
-                    </SelectContent>
-                </Select>
-            </FormField>
+        <!-- Paso 1: empresa, punto y fecha -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-muted/30 p-4 rounded-lg border">
+            <SearchableSelect
+                :model-value="selectedClient"
+                :options="clientOptions"
+                label="Empresa"
+                required
+                placeholder="Selecciona empresa..."
+                :clearable="false"
+                @update:model-value="onClientChange"
+            />
+            <SearchableSelect
+                :model-value="selectedSP"
+                :options="servicePointOptions"
+                label="Punto de Servicio"
+                required
+                placeholder="Selecciona punto..."
+                :disabled="!selectedClient"
+                :clearable="false"
+                @update:model-value="onServicePointChange"
+            />
             <FormField label="Fecha" required>
-                <DatePicker v-model="selectedDate" :max-value="today" @update:model-value="loadEmployees()" />
+                <DatePicker :model-value="selectedDate" :max-value="today" @update:model-value="onDateChange" />
             </FormField>
-            <div class="flex items-end">
-                <Button variant="outline" class="w-full" @click="loadEmployees">
-                    <ClipboardList class="h-4 w-4 mr-2" /> Cargar
-                </Button>
-            </div>
         </div>
 
-        <!-- Already saved warning -->
-        <Alert v-if="alreadySaved" class="mb-4 bg-amber-50 border-amber-200 dark:bg-amber-950/40 dark:border-amber-900">
-            <CheckCircle2 class="h-4 w-4 text-amber-600" />
-            <AlertDescription class="text-amber-700 dark:text-amber-400">
-                Ya registraste asistencias para esta fecha y punto de servicio. Solo el administrador puede hacer correcciones.
-            </AlertDescription>
-        </Alert>
-
-        <!-- Quick action -->
-        <div v-if="employees.length && !alreadySaved" class="flex gap-2 mb-4 flex-wrap items-center">
-            <span class="text-sm text-muted-foreground mr-2">Aplicar a todos:</span>
-            <button
-                v-for="s in STATUSES"
-                :key="s.value"
-                type="button"
-                @click="applyToAll(s.value)"
-                :class="['px-3 py-1.5 text-xs font-medium rounded-full border transition-colors', s.color]"
-            >
-                {{ s.label }}
-            </button>
-        </div>
-
-        <!-- Employee list -->
-        <div v-if="employees.length" class="space-y-3">
-            <div
-                v-for="(record, i) in records"
-                :key="record.employee_id"
-                class="bg-card border rounded-lg p-4 shadow-sm"
-                :class="{ 'opacity-70': isAlreadySaved(record.employee_id) }"
-            >
-                <div class="flex items-center gap-2 mb-3">
-                    <span class="font-medium">{{ employees[i]?.name }} {{ employees[i]?.last_name }}</span>
-                    <span class="text-xs text-muted-foreground font-mono">{{ employees[i]?.employee_number }}</span>
-                    <StatusBadge v-if="isAlreadySaved(record.employee_id)" :status="savedStatus(record.employee_id)!" />
+        <template v-if="selectedClient && selectedSP">
+            <!-- Paso 2: elegir colaboradores -->
+            <div class="mb-6 space-y-2">
+                <SearchableMultiSelect
+                    v-model="selectedEmployeeIds"
+                    :options="employeeOptions"
+                    label="Colaboradores a capturar"
+                    search-placeholder="Buscar por nombre, apellido o número de empleado..."
+                    empty-text="No hay colaboradores disponibles"
+                />
+                <div class="flex flex-wrap gap-2">
+                    <Button type="button" variant="outline" size="sm" @click="addAllFromPoint">
+                        <Users class="h-3.5 w-3.5 mr-1.5" /> Agregar todos los colaboradores del punto
+                    </Button>
+                    <Button v-if="selectedEmployeeIds.length" type="button" variant="ghost" size="sm" @click="clearSelection">
+                        <X class="h-3.5 w-3.5 mr-1.5" /> Limpiar selección
+                    </Button>
                 </div>
-                <template v-if="!isAlreadySaved(record.employee_id)">
+            </div>
+
+            <!-- Ya registrados -->
+            <Alert v-if="alreadySavedEmployees.length" class="mb-6 bg-amber-50 border-amber-200 dark:bg-amber-950/40 dark:border-amber-900">
+                <CheckCircle2 class="h-4 w-4 text-amber-600" />
+                <AlertDescription class="text-amber-700 dark:text-amber-400">
+                    <p class="mb-2">
+                        {{ alreadySavedEmployees.length }} colaborador(es) ya tienen asistencia registrada el {{ formatDateMx(selectedDate) }}. No se pueden volver a capturar.
+                    </p>
+                    <div class="flex flex-wrap gap-2">
+                        <div
+                            v-for="e in alreadySavedEmployees"
+                            :key="e.id"
+                            class="flex items-center gap-1.5 bg-background/60 rounded-full pl-2 pr-1 py-0.5 border border-amber-200 dark:border-amber-900"
+                        >
+                            <span class="text-xs">{{ e.name }} {{ e.last_name }}</span>
+                            <StatusBadge :status="savedStatus(e.id)!" />
+                        </div>
+                    </div>
+                </AlertDescription>
+            </Alert>
+
+            <!-- Acciones rápidas -->
+            <div v-if="recordList.length" class="flex gap-2 mb-4 flex-wrap items-center">
+                <span class="text-sm text-muted-foreground mr-2">Marcar seleccionados como:</span>
+                <button
+                    v-for="s in STATUSES.slice(0, 2)"
+                    :key="s.value"
+                    type="button"
+                    @click="applyToSelected(s.value)"
+                    :class="['px-3 py-1.5 text-xs font-medium rounded-full border transition-colors', s.color]"
+                >
+                    {{ s.label }}
+                </button>
+                <span class="text-muted-foreground mx-1">|</span>
+                <button
+                    type="button"
+                    @click="applyToAllInPoint('presente')"
+                    class="px-3 py-1.5 text-xs font-medium rounded-full border transition-colors bg-green-600 text-white border-green-600 hover:bg-green-700"
+                >
+                    Marcar todos como presente
+                </button>
+            </div>
+
+            <!-- Paso 3: lista de captura -->
+            <div v-if="recordList.length" class="space-y-3">
+                <Card
+                    v-for="record in recordList"
+                    :key="record.employee_id"
+                    class="p-4 border shadow-sm hover:shadow-md transition-all"
+                >
+                    <div class="flex items-center gap-2 mb-3">
+                        <span class="font-medium">
+                            {{ employeesById.get(record.employee_id)?.name }} {{ employeesById.get(record.employee_id)?.last_name }}
+                        </span>
+                        <span class="text-xs text-muted-foreground font-mono">{{ employeesById.get(record.employee_id)?.employee_number }}</span>
+                    </div>
                     <div class="flex gap-1.5 flex-wrap mb-3">
                         <button
                             v-for="s in STATUSES"
@@ -185,16 +297,18 @@ const newCount = computed(() => records.value.filter((r) => !isAlreadySaved(r.em
                             <Input v-model="record.notes" placeholder="Opcional..." class="h-8 text-sm" />
                         </FormField>
                     </div>
-                </template>
-                <div v-else class="text-sm text-muted-foreground">
-                    Ya registrado como: <StatusBadge :status="savedStatus(record.employee_id)!" />
-                </div>
+                </Card>
             </div>
-        </div>
 
-        <div v-else-if="selectedClient && selectedSP" class="text-center py-12 text-muted-foreground">
-            No hay colaboradores activos en este punto de servicio.
-        </div>
+            <div v-else-if="!employeeOptions.length && !alreadySavedEmployees.length" class="text-center py-12 text-muted-foreground">
+                No hay colaboradores activos en este punto de servicio.
+            </div>
+
+            <div v-else-if="!recordList.length" class="text-center py-12 text-muted-foreground border rounded-lg border-dashed">
+                <ClipboardList class="h-8 w-8 mx-auto mb-2 opacity-50" />
+                Busca y selecciona colaboradores arriba para comenzar a capturar.
+            </div>
+        </template>
 
         <div v-else class="text-center py-12 text-muted-foreground">
             Selecciona una empresa, punto de servicio y fecha para cargar colaboradores.

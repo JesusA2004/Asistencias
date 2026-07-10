@@ -1,23 +1,23 @@
 <script setup lang="ts">
 import { router, useForm } from '@inertiajs/vue3';
-import { Pencil, Plus, Trash2, Users } from '@lucide/vue';
+import { Pencil, Plus, Trash2, Users, X } from '@lucide/vue';
 import type {ColumnDef} from '@tanstack/vue-table';
-import { ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import AppDataTable from '@/components/AppDataTable.vue';
 import DeleteDialog from '@/components/DeleteDialog.vue';
 import FormActions from '@/components/FormActions.vue';
 import FormDialogContent from '@/components/FormDialogContent.vue';
 import FormInput from '@/components/FormInput.vue';
-import FormSelect from '@/components/FormSelect.vue';
 import PageHeader from '@/components/PageHeader.vue';
+import SearchableSelect from '@/components/SearchableSelect.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { SelectItem } from '@/components/ui/select';
 import { usePermissions } from '@/composables/usePermissions';
+import { formatDateTimeMx } from '@/lib/formatters';
 import type { AppUser, PaginatedData, Role } from '@/types/models';
 
-type UserWithRoles = AppUser & { email_verified_at: string | null; created_at: string };
+type UserWithRoles = Omit<AppUser, 'roles'> & { roles: Role[]; email_verified_at: string | null; created_at: string };
 
 const props = defineProps<{
     users: PaginatedData<UserWithRoles>;
@@ -52,7 +52,7 @@ const openEdit = (user: UserWithRoles) => {
     form.email = user.email;
     form.password = '';
     form.password_confirmation = '';
-    form.role = user.roles?.[0] ?? '';
+    form.role = user.roles?.[0]?.name ?? '';
     showModal.value = true;
 };
 
@@ -84,6 +84,32 @@ return;
 
 const onSearch = (q: string) => router.get('/usuarios', { ...props.filters, search: q }, { preserveState: true, replace: true });
 const onPage = (p: number) => router.get('/usuarios', { ...props.filters, page: p }, { preserveState: true });
+
+const roleOptions = computed(() => props.roles.map((r) => ({ value: r.name, label: r.name })));
+const filterRole = ref(props.filters.role ?? '');
+const filterRoleModel = computed({
+    get: () => filterRole.value,
+    set: (v: string | number | null) => {
+        filterRole.value = v == null ? '' : String(v);
+    },
+});
+const hasActiveFilters = computed(() => !!(props.filters.search || props.filters.role));
+
+watch(filterRole, (value) => {
+    router.get('/usuarios', { ...props.filters, role: value || undefined }, { preserveState: true, replace: true });
+});
+
+const clearFilters = () => {
+    filterRole.value = '';
+    router.get('/usuarios', {}, { preserveState: true, replace: true });
+};
+
+const roleModel = computed({
+    get: () => form.role,
+    set: (v: string | number | null) => {
+        form.role = v == null ? '' : String(v);
+    },
+});
 
 const roleColors: Record<string, string> = {
     administrador: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-400',
@@ -120,18 +146,29 @@ const columns: ColumnDef<UserWithRoles>[] = [
             @search="onSearch"
             @page-change="onPage"
         >
+            <template #filters>
+                <SearchableSelect
+                    v-model="filterRoleModel"
+                    :options="roleOptions"
+                    placeholder="Todos los roles"
+                    class="w-48"
+                />
+                <Button v-if="hasActiveFilters" variant="ghost" size="sm" @click="clearFilters">
+                    <X class="h-3.5 w-3.5 mr-1" /> Limpiar filtros
+                </Button>
+            </template>
             <template #cell-roles="{ item }">
                 <Badge
                     v-for="role in (item.roles ?? [])"
-                    :key="role"
+                    :key="role.id"
                     variant="outline"
-                    :class="['text-xs', roleColors[role] ?? '']"
+                    :class="['text-xs capitalize', roleColors[role.name] ?? '']"
                 >
-                    {{ role }}
+                    {{ role.name }}
                 </Badge>
             </template>
             <template #cell-created_at="{ value }">
-                <span class="text-xs text-muted-foreground">{{ value }}</span>
+                <span class="text-xs text-muted-foreground">{{ formatDateTimeMx(value as string) }}</span>
             </template>
             <template #actions="{ item }">
                 <Button v-if="hasPermission('Editar usuarios')" variant="ghost" size="sm" @click="openEdit(item)">
@@ -166,9 +203,14 @@ const columns: ColumnDef<UserWithRoles>[] = [
                         :error="form.errors.password"
                     />
                     <FormInput v-model="form.password_confirmation" type="password" label="Confirmar contraseña" placeholder="••••••••" />
-                    <FormSelect v-model="form.role" label="Rol" required placeholder="Selecciona rol..." :error="form.errors.role">
-                        <SelectItem v-for="role in roles" :key="role.id" :value="role.name">{{ role.name }}</SelectItem>
-                    </FormSelect>
+                    <SearchableSelect
+                        v-model="roleModel"
+                        :options="roleOptions"
+                        label="Rol"
+                        required
+                        placeholder="Selecciona rol..."
+                        :error="form.errors.role"
+                    />
                     <FormActions :processing="form.processing" @cancel="showModal = false" />
                 </form>
             </FormDialogContent>

@@ -79,7 +79,14 @@ const onSelect = (value: DateValue | undefined) => {
             </Button>
         </PopoverTrigger>
         <PopoverContent class="w-auto p-0" align="start">
-            <Calendar :model-value="parsedValue" :min-value="minDate" :max-value="maxDate" @update:model-value="onSelect" />
+            <Calendar
+                locale="es-MX"
+                :model-value="parsedValue"
+                :min-value="minDate"
+                :max-value="maxDate"
+                :week-starts-on="1"
+                @update:model-value="onSelect"
+            />
         </PopoverContent>
     </Popover>
 </template>

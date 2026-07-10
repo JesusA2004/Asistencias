@@ -3,6 +3,7 @@ import { Calendar, CheckCircle2, Clock, XCircle } from '@lucide/vue';
 import KPICard from '@/components/KPICard.vue';
 import StatusBadge from '@/components/StatusBadge.vue';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { formatDateMx } from '@/lib/formatters';
 import type { Attendance } from '@/types/models';
 
 defineProps<{
@@ -41,7 +42,7 @@ defineProps<{
                         class="flex items-center justify-between py-2 border-b last:border-0"
                     >
                         <div>
-                            <p class="text-sm font-medium">{{ a.attendance_date }}</p>
+                            <p class="text-sm font-medium">{{ formatDateMx(a.attendance_date) }}</p>
                             <p class="text-xs text-muted-foreground">
                                 {{ a.entry_time ?? '--:--' }} – {{ a.exit_time ?? '--:--' }}
                             </p>

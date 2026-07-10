@@ -2,7 +2,9 @@
 
 namespace App\Exports;
 
+use App\Http\Controllers\Admin\ReportController;
 use App\Models\Attendance;
+use Illuminate\Http\Request;
 use Maatwebsite\Excel\Concerns\FromQuery;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithHeadings;
@@ -12,20 +14,19 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 class AttendanceExport implements FromQuery, WithHeadings, WithMapping, ShouldAutoSize, WithStyles
 {
-    public function __construct(private readonly array $filters) {}
+    public function __construct(private readonly Request $request) {}
 
     public function query()
     {
-        return Attendance::with([
-            'employee:id,employee_number,name,last_name',
-            'client:id,name',
-            'servicePoint:id,name',
-            'supervisor:id,name',
-        ])
-            ->whereBetween('attendance_date', [$this->filters['date_from'], $this->filters['date_to']])
-            ->when($this->filters['client_id'] ?? null, fn ($q, $c) => $q->where('client_id', $c))
-            ->when($this->filters['service_point_id'] ?? null, fn ($q, $sp) => $q->where('service_point_id', $sp))
-            ->when($this->filters['status'] ?? null, fn ($q, $s) => $q->where('status', $s))
+        return ReportController::applyFilters(
+            Attendance::with([
+                'employee:id,employee_number,name,last_name',
+                'client:id,name',
+                'servicePoint:id,name',
+                'supervisor:id,name',
+            ]),
+            $this->request
+        )
             ->orderBy('attendance_date')
             ->orderBy('employee_id');
     }
