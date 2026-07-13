@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { router } from '@inertiajs/vue3';
-import { BarChart3, Download, FileText, Search, X } from '@lucide/vue';
+import { AlertTriangle, BarChart3, Download, FileText, Search, X } from '@lucide/vue';
 import type {ColumnDef} from '@tanstack/vue-table';
 import { computed, ref, watch } from 'vue';
+import AppChart from '@/components/AppChart.vue';
 import AppDataTable from '@/components/AppDataTable.vue';
 import DatePicker from '@/components/DatePicker.vue';
 import FormField from '@/components/FormField.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import SearchableSelect from '@/components/SearchableSelect.vue';
 import StatusBadge from '@/components/StatusBadge.vue';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -16,7 +18,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { usePermissions } from '@/composables/usePermissions';
 import { formatShortDateMx } from '@/lib/formatters';
+import { ATTENDANCE_STATUS_CONFIG, ATTENDANCE_STATUS_HEX, ATTENDANCE_STATUS_ORDER } from '@/lib/status';
 import type { Attendance, Client, Employee, PaginatedData, ServicePoint, Shift } from '@/types/models';
+
+type ChartBucket = { label: string; total: number };
 
 type ReportFilters = {
     date_from?: string;
@@ -35,6 +40,9 @@ type ReportFilters = {
 const props = defineProps<{
     attendances: PaginatedData<Attendance> | null;
     summary: { total: number; presente: number; falta: number; retardo: number; descanso: number; permiso: number; incapacidad: number } | null;
+    byClient: ChartBucket[] | null;
+    incidentsByServicePoint: ChartBucket[] | null;
+    trend: ChartBucket[] | null;
     clients: Client[];
     servicePoints: (ServicePoint & { client_id: number })[];
     employees: (Employee & { client_id: number | null })[];
@@ -85,6 +93,44 @@ const statusOptions = computed(() => STATUSES);
 
 const hasValidRange = computed(() => !!dateFrom.value && !!dateTo.value);
 
+// Paleta categórica de referencia (orden fijo, nunca ciclada arbitrariamente)
+// para series identitarias como "empresa". Ver skill dataviz/references/palette.md.
+const CATEGORICAL_HEX = ['#2a78d6', '#1baf7a', '#eda100', '#008300', '#4a3aa7', '#e34948', '#e87ba4', '#eb6834'];
+
+const statusDonutSeries = computed(() => ATTENDANCE_STATUS_ORDER.map((s) => props.summary?.[s] ?? 0));
+const statusDonutOptions = computed(() => ({
+    labels: ATTENDANCE_STATUS_ORDER.map((s) => ATTENDANCE_STATUS_CONFIG[s].label),
+    colors: ATTENDANCE_STATUS_ORDER.map((s) => ATTENDANCE_STATUS_HEX[s]),
+    legend: { position: 'bottom' as const },
+    dataLabels: { enabled: true, formatter: (val: number) => `${val.toFixed(0)}%` },
+}));
+
+const byClientSeries = computed(() => [{ name: 'Asistencias', data: (props.byClient ?? []).map((c) => c.total) }]);
+const byClientOptions = computed(() => ({
+    xaxis: { categories: (props.byClient ?? []).map((c) => c.label) },
+    colors: CATEGORICAL_HEX,
+    legend: { show: false },
+    plotOptions: { bar: { distributed: true, borderRadius: 4, columnWidth: '55%' } },
+}));
+
+const incidentsSeries = computed(() => [{ name: 'Incidencias', data: (props.incidentsByServicePoint ?? []).map((c) => c.total) }]);
+const incidentsOptions = computed(() => ({
+    xaxis: { categories: (props.incidentsByServicePoint ?? []).map((c) => c.label) },
+    colors: ['#dc2626'],
+    legend: { show: false },
+    plotOptions: { bar: { borderRadius: 4, columnWidth: '45%' } },
+}));
+
+const trendSeries = computed(() => [{ name: 'Registros', data: (props.trend ?? []).map((t) => t.total) }]);
+const trendOptions = computed(() => ({
+    xaxis: { categories: (props.trend ?? []).map((t) => formatShortDateMx(t.label)) },
+    colors: ['#2563eb'],
+    legend: { show: false },
+    fill: { type: 'gradient', gradient: { opacityFrom: 0.35, opacityTo: 0.05 } },
+}));
+
+const hasChartData = computed(() => !!(props.byClient?.length || props.incidentsByServicePoint?.length || props.trend?.length));
+
 const hasActiveFilters = computed(() =>
     !!(clientId.value || spId.value || employeeId.value || supervisorId.value || shiftId.value
         || status.value || search.value || onlyIncidents.value || onlyPresent.value),
@@ -108,6 +154,7 @@ const reload = () => {
     if (!hasValidRange.value) {
         return;
     }
+
     router.get('/reportes', buildParams(), { preserveState: true, replace: true });
 };
 
@@ -130,12 +177,14 @@ watch(onlyIncidents, (v) => {
     if (v) {
 onlyPresent.value = false;
 }
+
     reload();
 });
 watch(onlyPresent, (v) => {
     if (v) {
 onlyIncidents.value = false;
 }
+
     reload();
 });
 
@@ -260,6 +309,33 @@ const columns: ColumnDef<Attendance>[] = [
                 <Card class="border-0 shadow-sm text-center p-3 bg-orange-50 dark:bg-orange-950">
                     <div class="text-xl font-bold text-orange-700 dark:text-orange-400">{{ summary.incapacidad }}</div>
                     <div class="text-xs text-orange-600 dark:text-orange-500">Incapacidades</div>
+                </Card>
+            </div>
+
+            <Alert v-if="summary && summary.total > 1000 && hasPermission('Exportar reportes')" class="mb-6 border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40">
+                <AlertTriangle class="h-4 w-4 text-amber-600" />
+                <AlertDescription class="text-amber-700 dark:text-amber-400">
+                    El reporte tiene {{ summary.total }} registros. El PDF exporta un máximo de 1000 filas; usa Excel para obtener el reporte completo.
+                </AlertDescription>
+            </Alert>
+
+            <!-- Gráficas -->
+            <div v-if="hasChartData" class="grid grid-cols-1 gap-4 mb-6 lg:grid-cols-2">
+                <Card class="border-0 shadow-sm p-4">
+                    <h3 class="text-sm font-semibold mb-2">Distribución de estados</h3>
+                    <AppChart type="donut" :series="statusDonutSeries" :options="statusDonutOptions" :height="280" />
+                </Card>
+                <Card class="border-0 shadow-sm p-4">
+                    <h3 class="text-sm font-semibold mb-2">Asistencias por empresa</h3>
+                    <AppChart type="bar" :series="byClientSeries" :options="byClientOptions" :height="280" />
+                </Card>
+                <Card class="border-0 shadow-sm p-4">
+                    <h3 class="text-sm font-semibold mb-2">Incidencias por punto de servicio</h3>
+                    <AppChart type="bar" :series="incidentsSeries" :options="incidentsOptions" :height="280" />
+                </Card>
+                <Card class="border-0 shadow-sm p-4">
+                    <h3 class="text-sm font-semibold mb-2">Tendencia de registros por fecha</h3>
+                    <AppChart type="area" :series="trendSeries" :options="trendOptions" :height="280" />
                 </Card>
             </div>
 

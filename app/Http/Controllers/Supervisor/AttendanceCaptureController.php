@@ -24,16 +24,26 @@ class AttendanceCaptureController extends Controller
         $user = auth()->user();
         $this->authorize('create', Attendance::class);
 
+        // Los administradores (y roles con acceso amplio) no dependen de una fila en
+        // supervisor_assignments: ven todas las empresas/puntos activos. Un supervisor
+        // normal sigue restringido a lo que tenga asignado explícitamente.
+        $hasBroadAccess = $user->hasRole('administrador');
         $assignedClientIds = $user->supervisorAssignments()->pluck('client_id')->unique();
         $assignedSPIds = $user->supervisorAssignments()->whereNotNull('service_point_id')->pluck('service_point_id')->unique();
+        $hasAssignments = $hasBroadAccess || $assignedClientIds->isNotEmpty();
 
-        $clients = Client::whereIn('id', $assignedClientIds)->where('status', 'activo')->orderBy('name')->get(['id', 'name']);
-
-        // Se cargan todos los puntos de servicio asignados (de todas las empresas) para
-        // que el frontend filtre por empresa al instante, sin ida y vuelta al servidor.
-        $servicePoints = ServicePoint::whereIn('client_id', $assignedClientIds)
+        $clients = Client::when(! $hasBroadAccess, fn ($q) => $q->whereIn('id', $assignedClientIds))
             ->where('status', 'activo')
-            ->when($assignedSPIds->isNotEmpty(), fn ($q) => $q->whereIn('id', $assignedSPIds))
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        $clientIdsInScope = $hasBroadAccess ? $clients->pluck('id') : $assignedClientIds;
+
+        // Se cargan todos los puntos de servicio en alcance (de todas las empresas) para
+        // que el frontend filtre por empresa al instante, sin ida y vuelta al servidor.
+        $servicePoints = ServicePoint::whereIn('client_id', $clientIdsInScope)
+            ->where('status', 'activo')
+            ->when(! $hasBroadAccess && $assignedSPIds->isNotEmpty(), fn ($q) => $q->whereIn('id', $assignedSPIds))
             ->orderBy('name')
             ->get(['id', 'client_id', 'name']);
 
@@ -43,7 +53,7 @@ class AttendanceCaptureController extends Controller
         $clientId = $request->integer('client_id');
         $servicePointId = $request->integer('service_point_id');
 
-        if ($clientId && $servicePointId && $assignedClientIds->contains($clientId)) {
+        if ($clientId && $servicePointId && ($hasBroadAccess || $assignedClientIds->contains($clientId))) {
             $spBelongsToClient = $servicePoints->contains(
                 fn ($sp) => (int) $sp->id === $servicePointId && (int) $sp->client_id === $clientId
             );
@@ -53,8 +63,9 @@ class AttendanceCaptureController extends Controller
 
                 $employees = Employee::where('service_point_id', $servicePointId)
                     ->where('status', 'activo')
+                    ->with('shift:id,name')
                     ->orderBy('last_name')
-                    ->get(['id', 'employee_number', 'name', 'last_name', 'second_last_name']);
+                    ->get(['id', 'employee_number', 'name', 'last_name', 'second_last_name', 'shift_id']);
 
                 $existingAttendances = Attendance::where('service_point_id', $servicePointId)
                     ->whereDate('attendance_date', $date)
@@ -69,6 +80,7 @@ class AttendanceCaptureController extends Controller
             'employees' => $employees,
             'existingAttendances' => $existingAttendances,
             'filters' => $request->only(['client_id', 'service_point_id', 'date']),
+            'hasAssignments' => $hasAssignments,
         ]);
     }
 
@@ -89,20 +101,23 @@ class AttendanceCaptureController extends Controller
         ]);
 
         $user = auth()->user();
+        $hasBroadAccess = $user->hasRole('administrador');
 
-        $assignments = $user->supervisorAssignments()
-            ->where('client_id', $request->client_id)
-            ->get();
+        if (! $hasBroadAccess) {
+            $assignments = $user->supervisorAssignments()
+                ->where('client_id', $request->client_id)
+                ->get();
 
-        if ($assignments->isEmpty()) {
-            return back()->with('error', 'No tienes asignación para esta empresa.');
-        }
+            if ($assignments->isEmpty()) {
+                return back()->with('error', 'No tienes asignación para esta empresa.');
+            }
 
-        $hasClientWideAccess = $assignments->contains(fn ($a) => $a->service_point_id === null);
-        $hasSpecificPointAccess = $assignments->contains(fn ($a) => (int) $a->service_point_id === (int) $request->service_point_id);
+            $hasClientWideAccess = $assignments->contains(fn ($a) => $a->service_point_id === null);
+            $hasSpecificPointAccess = $assignments->contains(fn ($a) => (int) $a->service_point_id === (int) $request->service_point_id);
 
-        if (! $hasClientWideAccess && ! $hasSpecificPointAccess) {
-            return back()->with('error', 'No tienes asignación para este punto de servicio.');
+            if (! $hasClientWideAccess && ! $hasSpecificPointAccess) {
+                return back()->with('error', 'No tienes asignación para este punto de servicio.');
+            }
         }
 
         $servicePointBelongsToClient = ServicePoint::where('id', $request->service_point_id)
@@ -124,7 +139,10 @@ class AttendanceCaptureController extends Controller
             return back()->with('error', 'Uno o más colaboradores no pertenecen a la empresa o punto de servicio seleccionados.');
         }
 
-        DB::transaction(function () use ($request, $user) {
+        $createdCount = 0;
+        $skippedCount = 0;
+
+        DB::transaction(function () use ($request, $user, &$createdCount, &$skippedCount) {
             foreach ($request->records as $record) {
                 $existing = Attendance::where('employee_id', $record['employee_id'])
                     ->whereDate('attendance_date', $request->attendance_date)
@@ -132,8 +150,12 @@ class AttendanceCaptureController extends Controller
                     ->first();
 
                 if ($existing) {
+                    $skippedCount++;
+
                     continue; // Supervisor cannot overwrite existing records
                 }
+
+                $createdCount++;
 
                 $employee = Employee::find($record['employee_id']);
 
@@ -203,6 +225,11 @@ class AttendanceCaptureController extends Controller
             }
         });
 
-        return back()->with('success', 'Asistencias registradas correctamente.');
+        $message = "{$createdCount} asistencia(s) registrada(s) correctamente.";
+        if ($skippedCount > 0) {
+            $message .= " {$skippedCount} ya existía(n) y se omitieron.";
+        }
+
+        return back()->with('success', $message);
     }
 }

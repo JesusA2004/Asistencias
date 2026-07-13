@@ -1,16 +1,16 @@
 <script setup lang="ts" generic="TData, TValue">
 import type { LucideIcon } from '@lucide/vue';
-import { ChevronLeft, ChevronRight, Search } from '@lucide/vue';
+import { Search } from '@lucide/vue';
 import {
-    
+
     FlexRender,
     getCoreRowModel,
     useVueTable
 } from '@tanstack/vue-table';
 import type {ColumnDef} from '@tanstack/vue-table';
 import { ref, useSlots } from 'vue';
+import AppPagination from '@/components/AppPagination.vue';
 import EmptyState from '@/components/EmptyState.vue';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -190,31 +190,6 @@ const totalColumns = () => props.columns.length + (slots.actions ? 1 : 0);
             <EmptyState v-else :title="emptyTitle" :description="emptyDescription" :icon="emptyIcon" />
         </div>
 
-        <div v-if="pagination && pagination.last_page > 1" class="flex items-center justify-between text-sm">
-            <span class="text-muted-foreground">
-                Mostrando {{ pagination.from ?? 0 }}–{{ pagination.to ?? 0 }} de {{ pagination.total }} registros
-            </span>
-            <div class="flex items-center gap-1">
-                <Button
-                    variant="outline"
-                    size="sm"
-                    :disabled="pagination.current_page <= 1"
-                    @click="emit('page-change', pagination.current_page - 1)"
-                >
-                    <ChevronLeft class="h-4 w-4" />
-                </Button>
-                <span class="px-3 py-1.5 text-sm border rounded-md bg-muted/30">
-                    {{ pagination.current_page }} / {{ pagination.last_page }}
-                </span>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    :disabled="pagination.current_page >= pagination.last_page"
-                    @click="emit('page-change', pagination.current_page + 1)"
-                >
-                    <ChevronRight class="h-4 w-4" />
-                </Button>
-            </div>
-        </div>
+        <AppPagination v-if="pagination" :pagination="pagination" @page-change="emit('page-change', $event)" />
     </div>
 </template>

@@ -1,27 +1,32 @@
 <script setup lang="ts">
 import { router, useForm } from '@inertiajs/vue3';
-import { CheckCircle2, ClipboardList, Save, Users, X } from '@lucide/vue';
+import { AlertTriangle, CheckCircle2, ClipboardList, Users, X } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
-import DatePicker from '@/components/DatePicker.vue';
-import FormField from '@/components/FormField.vue';
+import { toast } from 'vue-sonner';
+import AttendanceBulkActions from '@/components/AttendanceBulkActions.vue';
+import AttendanceEmployeeCard from '@/components/AttendanceEmployeeCard.vue';
+import AttendanceFiltersToolbar from '@/components/AttendanceFiltersToolbar.vue';
+import AttendanceSummaryBar from '@/components/AttendanceSummaryBar.vue';
+import EmptyState from '@/components/EmptyState.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import SearchableMultiSelect from '@/components/SearchableMultiSelect.vue';
-import SearchableSelect from '@/components/SearchableSelect.vue';
 import StatusBadge from '@/components/StatusBadge.vue';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { useInertiaLoading } from '@/composables/useInertiaLoading';
 import { formatDateMx } from '@/lib/formatters';
 import type { Attendance, AttendanceStatus, Client, Employee, ServicePoint } from '@/types/models';
 
 const props = defineProps<{
     clients: Client[];
     servicePoints: (ServicePoint & { client_id: number })[];
-    employees: Employee[];
+    employees: (Employee & { shift?: { id: number; name: string } | null })[];
     existingAttendances: Record<number, Attendance>;
     filters: { client_id?: string; service_point_id?: string; date?: string };
+    hasAssignments: boolean;
 }>();
+
+const { isLoading } = useInertiaLoading();
 
 const today = new Date().toISOString().split('T')[0];
 const selectedClient = ref(props.filters.client_id ?? '');
@@ -37,15 +42,6 @@ const filteredServicePoints = computed(() =>
 const clientOptions = computed(() => props.clients.map((c) => ({ value: c.id, label: c.name })));
 const servicePointOptions = computed(() => filteredServicePoints.value.map((sp) => ({ value: sp.id, label: sp.name })));
 
-const STATUSES: { value: AttendanceStatus; label: string; color: string; activeColor: string }[] = [
-    { value: 'presente', label: 'Presente', color: 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100 dark:bg-green-950/40 dark:text-green-400 dark:border-green-900', activeColor: 'bg-green-600 text-white border-green-600 hover:bg-green-600' },
-    { value: 'falta', label: 'Falta', color: 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100 dark:bg-red-950/40 dark:text-red-400 dark:border-red-900', activeColor: 'bg-red-600 text-white border-red-600 hover:bg-red-600' },
-    { value: 'retardo', label: 'Retardo', color: 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 dark:bg-purple-950/40 dark:text-purple-400 dark:border-purple-900', activeColor: 'bg-purple-600 text-white border-purple-600 hover:bg-purple-600' },
-    { value: 'descanso', label: 'Descanso', color: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-900', activeColor: 'bg-blue-600 text-white border-blue-600 hover:bg-blue-600' },
-    { value: 'permiso', label: 'Permiso', color: 'bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100 dark:bg-yellow-950/40 dark:text-yellow-400 dark:border-yellow-900', activeColor: 'bg-yellow-600 text-white border-yellow-600 hover:bg-yellow-600' },
-    { value: 'incapacidad', label: 'Incapacidad', color: 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 dark:bg-orange-950/40 dark:text-orange-400 dark:border-orange-900', activeColor: 'bg-orange-600 text-white border-orange-600 hover:bg-orange-600' },
-];
-
 interface RecordEntry {
     employee_id: number;
     status: AttendanceStatus;
@@ -54,7 +50,6 @@ interface RecordEntry {
     notes: string;
 }
 
-// Colaboradores que el supervisor eligió agregar a la lista de captura.
 const selectedEmployeeIds = ref<number[]>([]);
 const records = ref<Map<number, RecordEntry>>(new Map());
 
@@ -63,21 +58,21 @@ const savedStatus = (employeeId: number) => props.existingAttendances[employeeId
 
 const employeesById = computed(() => new Map(props.employees.map((e) => [e.id, e])));
 const alreadySavedEmployees = computed(() => props.employees.filter((e) => isAlreadySaved(e.id)));
+const availableEmployees = computed(() => props.employees.filter((e) => !isAlreadySaved(e.id)));
 
 const employeeOptions = computed(() =>
-    props.employees
-        .filter((e) => !isAlreadySaved(e.id))
-        .map((e) => ({
-            value: e.id,
-            label: `${e.name} ${e.last_name}`,
-            description: e.employee_number,
-        })),
+    availableEmployees.value.map((e) => ({
+        value: e.id,
+        label: `${e.name} ${e.last_name}`,
+        description: e.employee_number,
+    })),
 );
 
 // Mantiene `records` sincronizado con la selección de colaboradores, sin perder
 // lo ya capturado para los que siguen seleccionados.
 watch(selectedEmployeeIds, (ids) => {
     const next = new Map<number, RecordEntry>();
+
     for (const id of ids) {
         next.set(id, records.value.get(id) ?? {
             employee_id: id,
@@ -87,13 +82,14 @@ watch(selectedEmployeeIds, (ids) => {
             notes: '',
         });
     }
+
     records.value = next;
 }, { deep: false });
 
 const recordList = computed(() => selectedEmployeeIds.value.map((id) => records.value.get(id)!).filter(Boolean));
 
 const addAllFromPoint = () => {
-    const allIds = props.employees.filter((e) => !isAlreadySaved(e.id)).map((e) => e.id);
+    const allIds = availableEmployees.value.map((e) => e.id);
     selectedEmployeeIds.value = Array.from(new Set([...selectedEmployeeIds.value, ...allIds]));
 };
 
@@ -101,21 +97,32 @@ const clearSelection = () => {
     selectedEmployeeIds.value = [];
 };
 
-const applyToSelected = (status: AttendanceStatus) => {
+const markSelected = (status: AttendanceStatus) => {
     recordList.value.forEach((r) => {
         r.status = status;
     });
 };
 
-const applyToAllInPoint = (status: AttendanceStatus) => {
-    const allIds = props.employees.filter((e) => !isAlreadySaved(e.id)).map((e) => e.id);
+const markAll = (status: AttendanceStatus) => {
+    const allIds = availableEmployees.value.map((e) => e.id);
     const next = new Map<number, RecordEntry>();
+
     for (const id of allIds) {
         const existing = records.value.get(id);
         next.set(id, existing ? { ...existing, status } : { employee_id: id, status, entry_time: '', exit_time: '', notes: '' });
     }
+
     records.value = next;
     selectedEmployeeIds.value = allIds;
+};
+
+const clearStates = () => {
+    recordList.value.forEach((r) => {
+        r.status = 'presente';
+        r.entry_time = '';
+        r.exit_time = '';
+        r.notes = '';
+    });
 };
 
 const form = useForm({
@@ -156,162 +163,155 @@ const submit = () => {
     form.attendance_date = selectedDate.value;
     form.records = recordList.value;
     form.post('/asistencias/capturar', {
-        onSuccess: () => {
+        onSuccess: (page) => {
             selectedEmployeeIds.value = [];
+            const flash = (page.props.flash ?? {}) as { success?: string | null; error?: string | null };
+
+            if (flash.success) {
+                toast.success(flash.success);
+            }
+
+            if (flash.error) {
+                toast.error(flash.error);
+            }
         },
     });
 };
+
+const noClientsMessage = computed(() =>
+    props.hasAssignments
+        ? 'No hay empresas activas registradas en el sistema.'
+        : 'No tienes empresas asignadas. Solicita acceso a un administrador.',
+);
 </script>
 
 <template>
-    <div class="p-6 max-w-5xl mx-auto">
-        <PageHeader title="Capturar Asistencia" description="Registra la asistencia diaria de tus colaboradores">
-            <template #actions>
-                <Button v-if="recordList.length" @click="submit" :disabled="form.processing">
-                    <Save class="h-4 w-4 mr-2" />
-                    {{ form.processing ? 'Guardando...' : `Guardar ${recordList.length} registros` }}
-                </Button>
-            </template>
-        </PageHeader>
+    <div class="w-full p-6">
+        <PageHeader title="Capturar Asistencia" description="Registra la asistencia diaria de tus colaboradores" />
 
-        <!-- Paso 1: empresa, punto y fecha -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-muted/30 p-4 rounded-lg border">
-            <SearchableSelect
-                :model-value="selectedClient"
-                :options="clientOptions"
-                label="Empresa"
-                required
-                placeholder="Selecciona empresa..."
-                :clearable="false"
-                @update:model-value="onClientChange"
-            />
-            <SearchableSelect
-                :model-value="selectedSP"
-                :options="servicePointOptions"
-                label="Punto de Servicio"
-                required
-                placeholder="Selecciona punto..."
-                :disabled="!selectedClient"
-                :clearable="false"
-                @update:model-value="onServicePointChange"
-            />
-            <FormField label="Fecha" required>
-                <DatePicker :model-value="selectedDate" :max-value="today" @update:model-value="onDateChange" />
-            </FormField>
-        </div>
+        <EmptyState
+            v-if="!clients.length"
+            title="Sin empresas disponibles"
+            :description="noClientsMessage"
+            :icon="AlertTriangle"
+        />
 
-        <template v-if="selectedClient && selectedSP">
-            <!-- Paso 2: elegir colaboradores -->
-            <div class="mb-6 space-y-2">
-                <SearchableMultiSelect
-                    v-model="selectedEmployeeIds"
-                    :options="employeeOptions"
-                    label="Colaboradores a capturar"
-                    search-placeholder="Buscar por nombre, apellido o número de empleado..."
-                    empty-text="No hay colaboradores disponibles"
-                />
-                <div class="flex flex-wrap gap-2">
-                    <Button type="button" variant="outline" size="sm" @click="addAllFromPoint">
-                        <Users class="h-3.5 w-3.5 mr-1.5" /> Agregar todos los colaboradores del punto
-                    </Button>
-                    <Button v-if="selectedEmployeeIds.length" type="button" variant="ghost" size="sm" @click="clearSelection">
-                        <X class="h-3.5 w-3.5 mr-1.5" /> Limpiar selección
-                    </Button>
+        <template v-else>
+            <AttendanceFiltersToolbar
+                class="mb-6"
+                :client-id="selectedClient"
+                :service-point-id="selectedSP"
+                :date="selectedDate"
+                :client-options="clientOptions"
+                :service-point-options="servicePointOptions"
+                :max-date="today"
+                :loading="isLoading"
+                @update:client-id="onClientChange"
+                @update:service-point-id="onServicePointChange"
+                @update:date="onDateChange"
+            />
+
+            <template v-if="selectedClient && selectedSP">
+                <!-- Paso 2: elegir colaboradores -->
+                <div class="mb-6 space-y-2 rounded-xl border bg-card p-5 shadow-sm">
+                    <h2 class="mb-1 text-sm font-semibold text-foreground">Paso 2 · Selecciona colaboradores</h2>
+                    <SearchableMultiSelect
+                        v-model="selectedEmployeeIds"
+                        :options="employeeOptions"
+                        search-placeholder="Buscar por nombre, apellido o número de empleado..."
+                        empty-text="No hay colaboradores disponibles"
+                    />
+                    <div class="flex flex-wrap gap-2 pt-1">
+                        <Button type="button" variant="outline" size="sm" @click="addAllFromPoint">
+                            <Users class="mr-1.5 h-3.5 w-3.5" /> Seleccionar todos los colaboradores del punto
+                        </Button>
+                        <Button v-if="selectedEmployeeIds.length" type="button" variant="ghost" size="sm" @click="clearSelection">
+                            <X class="mr-1.5 h-3.5 w-3.5" /> Limpiar selección
+                        </Button>
+                    </div>
                 </div>
-            </div>
 
-            <!-- Ya registrados -->
-            <Alert v-if="alreadySavedEmployees.length" class="mb-6 bg-amber-50 border-amber-200 dark:bg-amber-950/40 dark:border-amber-900">
-                <CheckCircle2 class="h-4 w-4 text-amber-600" />
-                <AlertDescription class="text-amber-700 dark:text-amber-400">
-                    <p class="mb-2">
-                        {{ alreadySavedEmployees.length }} colaborador(es) ya tienen asistencia registrada el {{ formatDateMx(selectedDate) }}. No se pueden volver a capturar.
-                    </p>
-                    <div class="flex flex-wrap gap-2">
-                        <div
-                            v-for="e in alreadySavedEmployees"
-                            :key="e.id"
-                            class="flex items-center gap-1.5 bg-background/60 rounded-full pl-2 pr-1 py-0.5 border border-amber-200 dark:border-amber-900"
-                        >
-                            <span class="text-xs">{{ e.name }} {{ e.last_name }}</span>
-                            <StatusBadge :status="savedStatus(e.id)!" />
+                <!-- Ya registrados -->
+                <Alert v-if="alreadySavedEmployees.length" class="mb-6 border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40">
+                    <CheckCircle2 class="h-4 w-4 text-amber-600" />
+                    <AlertDescription class="text-amber-700 dark:text-amber-400">
+                        <p class="mb-2">
+                            {{ alreadySavedEmployees.length }} colaborador(es) ya tienen asistencia registrada el {{ formatDateMx(selectedDate) }}. No se pueden volver a capturar.
+                        </p>
+                        <div class="flex flex-wrap gap-2">
+                            <div
+                                v-for="e in alreadySavedEmployees"
+                                :key="e.id"
+                                class="flex items-center gap-1.5 rounded-full border border-amber-200 bg-background/60 py-0.5 pr-1 pl-2 dark:border-amber-900"
+                            >
+                                <span class="text-xs">{{ e.name }} {{ e.last_name }}</span>
+                                <StatusBadge :status="savedStatus(e.id)!" />
+                            </div>
                         </div>
-                    </div>
-                </AlertDescription>
-            </Alert>
+                    </AlertDescription>
+                </Alert>
 
-            <!-- Acciones rápidas -->
-            <div v-if="recordList.length" class="flex gap-2 mb-4 flex-wrap items-center">
-                <span class="text-sm text-muted-foreground mr-2">Marcar seleccionados como:</span>
-                <button
-                    v-for="s in STATUSES.slice(0, 2)"
-                    :key="s.value"
-                    type="button"
-                    @click="applyToSelected(s.value)"
-                    :class="['px-3 py-1.5 text-xs font-medium rounded-full border transition-colors', s.color]"
-                >
-                    {{ s.label }}
-                </button>
-                <span class="text-muted-foreground mx-1">|</span>
-                <button
-                    type="button"
-                    @click="applyToAllInPoint('presente')"
-                    class="px-3 py-1.5 text-xs font-medium rounded-full border transition-colors bg-green-600 text-white border-green-600 hover:bg-green-700"
-                >
-                    Marcar todos como presente
-                </button>
-            </div>
-
-            <!-- Paso 3: lista de captura -->
-            <div v-if="recordList.length" class="space-y-3">
-                <Card
-                    v-for="record in recordList"
-                    :key="record.employee_id"
-                    class="p-4 border shadow-sm hover:shadow-md transition-all"
-                >
-                    <div class="flex items-center gap-2 mb-3">
-                        <span class="font-medium">
-                            {{ employeesById.get(record.employee_id)?.name }} {{ employeesById.get(record.employee_id)?.last_name }}
-                        </span>
-                        <span class="text-xs text-muted-foreground font-mono">{{ employeesById.get(record.employee_id)?.employee_number }}</span>
+                <template v-if="!availableEmployees.length">
+                    <EmptyState
+                        title="No hay colaboradores activos"
+                        description="Este punto de servicio no tiene colaboradores activos disponibles para capturar."
+                    />
+                </template>
+                <template v-else-if="!recordList.length">
+                    <EmptyState
+                        title="Selecciona colaboradores para comenzar"
+                        description="Busca y selecciona uno o varios colaboradores arriba para agregarlos a la lista de captura."
+                        :icon="ClipboardList"
+                    />
+                </template>
+                <template v-else>
+                    <!-- Paso 3: acciones masivas -->
+                    <div class="mb-4">
+                        <AttendanceBulkActions
+                            :selected-count="selectedEmployeeIds.length"
+                            :has-records="!!recordList.length"
+                            @mark-selected="markSelected"
+                            @mark-all="markAll"
+                            @clear-states="clearStates"
+                            @add-all="addAllFromPoint"
+                        />
                     </div>
-                    <div class="flex gap-1.5 flex-wrap mb-3">
-                        <button
-                            v-for="s in STATUSES"
-                            :key="s.value"
-                            type="button"
-                            @click="record.status = s.value"
-                            :class="['px-2.5 py-1 text-xs font-medium rounded-full border transition-colors', record.status === s.value ? s.activeColor : s.color]"
-                        >
-                            {{ s.label }}
-                        </button>
-                    </div>
-                    <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
-                        <FormField label="Entrada" class="text-xs">
-                            <Input type="time" v-model="record.entry_time" class="h-8 text-sm" />
-                        </FormField>
-                        <FormField label="Salida" class="text-xs">
-                            <Input type="time" v-model="record.exit_time" class="h-8 text-sm" />
-                        </FormField>
-                        <FormField label="Notas" class="text-xs col-span-2 md:col-span-1">
-                            <Input v-model="record.notes" placeholder="Opcional..." class="h-8 text-sm" />
-                        </FormField>
-                    </div>
-                </Card>
-            </div>
 
-            <div v-else-if="!employeeOptions.length && !alreadySavedEmployees.length" class="text-center py-12 text-muted-foreground">
-                No hay colaboradores activos en este punto de servicio.
-            </div>
+                    <!-- Paso 4: lista de captura -->
+                    <div class="grid grid-cols-1 gap-3 xl:grid-cols-2">
+                        <AttendanceEmployeeCard
+                            v-for="record in recordList"
+                            :key="record.employee_id"
+                            :name="`${employeesById.get(record.employee_id)?.name} ${employeesById.get(record.employee_id)?.last_name}`"
+                            :employee-number="employeesById.get(record.employee_id)?.employee_number ?? ''"
+                            :shift-name="employeesById.get(record.employee_id)?.shift?.name"
+                            :status="record.status"
+                            :entry-time="record.entry_time"
+                            :exit-time="record.exit_time"
+                            :notes="record.notes"
+                            @update:status="record.status = $event"
+                            @update:entry-time="record.entry_time = $event"
+                            @update:exit-time="record.exit_time = $event"
+                            @update:notes="record.notes = $event"
+                        />
+                    </div>
 
-            <div v-else-if="!recordList.length" class="text-center py-12 text-muted-foreground border rounded-lg border-dashed">
-                <ClipboardList class="h-8 w-8 mx-auto mb-2 opacity-50" />
-                Busca y selecciona colaboradores arriba para comenzar a capturar.
-            </div>
+                    <AttendanceSummaryBar
+                        :total-selected="selectedEmployeeIds.length"
+                        :total-new="recordList.length"
+                        :total-already-registered="alreadySavedEmployees.length"
+                        :saving="form.processing"
+                        @save="submit"
+                    />
+                </template>
+            </template>
+
+            <EmptyState
+                v-else
+                title="Selecciona empresa, punto y fecha para comenzar"
+                description="Elige la empresa, el punto de servicio y la fecha arriba para cargar a los colaboradores."
+                :icon="ClipboardList"
+            />
         </template>
-
-        <div v-else class="text-center py-12 text-muted-foreground">
-            Selecciona una empresa, punto de servicio y fecha para cargar colaboradores.
-        </div>
     </div>
 </template>

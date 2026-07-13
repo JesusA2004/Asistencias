@@ -26,17 +26,20 @@ class ReportController extends Controller
      */
     public static function applyFilters(Builder $query, Request $request): Builder
     {
+        // Columnas calificadas con la tabla: los reportes de gráficas hacen JOIN con
+        // clients/service_points, que también tienen columnas id/client_id propias,
+        // y un where sin calificar sería ambiguo para MySQL en esos casos.
         return $query
-            ->when($request->date_from, fn ($q, $v) => $q->whereDate('attendance_date', '>=', $v))
-            ->when($request->date_to, fn ($q, $v) => $q->whereDate('attendance_date', '<=', $v))
-            ->when($request->client_id, fn ($q, $v) => $q->where('client_id', $v))
-            ->when($request->service_point_id, fn ($q, $v) => $q->where('service_point_id', $v))
-            ->when($request->employee_id, fn ($q, $v) => $q->where('employee_id', $v))
-            ->when($request->supervisor_id, fn ($q, $v) => $q->where('supervisor_id', $v))
-            ->when($request->shift_id, fn ($q, $v) => $q->where('shift_id', $v))
-            ->when($request->status, fn ($q, $v) => $q->where('status', $v))
-            ->when($request->boolean('only_incidents'), fn ($q) => $q->whereIn('status', ['falta', 'retardo']))
-            ->when($request->boolean('only_present'), fn ($q) => $q->where('status', 'presente'))
+            ->when($request->date_from, fn ($q, $v) => $q->whereDate('attendances.attendance_date', '>=', $v))
+            ->when($request->date_to, fn ($q, $v) => $q->whereDate('attendances.attendance_date', '<=', $v))
+            ->when($request->client_id, fn ($q, $v) => $q->where('attendances.client_id', $v))
+            ->when($request->service_point_id, fn ($q, $v) => $q->where('attendances.service_point_id', $v))
+            ->when($request->employee_id, fn ($q, $v) => $q->where('attendances.employee_id', $v))
+            ->when($request->supervisor_id, fn ($q, $v) => $q->where('attendances.supervisor_id', $v))
+            ->when($request->shift_id, fn ($q, $v) => $q->where('attendances.shift_id', $v))
+            ->when($request->status, fn ($q, $v) => $q->where('attendances.status', $v))
+            ->when($request->boolean('only_incidents'), fn ($q) => $q->whereIn('attendances.status', ['falta', 'retardo']))
+            ->when($request->boolean('only_present'), fn ($q) => $q->where('attendances.status', 'presente'))
             ->when($request->search, fn ($q, $v) => $q->whereHas('employee', fn ($eq) => $eq
                 ->where('employee_number', 'like', "%{$v}%")
                 ->orWhere('name', 'like', "%{$v}%")
@@ -58,6 +61,9 @@ class ReportController extends Controller
 
         $attendances = null;
         $summary = null;
+        $byClient = null;
+        $incidentsByServicePoint = null;
+        $trend = null;
 
         if ($request->date_from && $request->date_to) {
             $query = self::applyFilters(
@@ -83,11 +89,35 @@ class ReportController extends Controller
                     SUM(status = "incapacidad") as incapacidad
                 ')
                 ->first();
+
+            $byClient = self::applyFilters(Attendance::query(), $request)
+                ->join('clients', 'clients.id', '=', 'attendances.client_id')
+                ->selectRaw('clients.name as label, COUNT(*) as total')
+                ->groupBy('clients.id', 'clients.name')
+                ->orderByDesc('total')
+                ->get();
+
+            $incidentsByServicePoint = self::applyFilters(Attendance::query(), $request)
+                ->join('service_points', 'service_points.id', '=', 'attendances.service_point_id')
+                ->whereIn('attendances.status', ['falta', 'retardo'])
+                ->selectRaw('service_points.name as label, COUNT(*) as total')
+                ->groupBy('service_points.id', 'service_points.name')
+                ->orderByDesc('total')
+                ->get();
+
+            $trend = self::applyFilters(Attendance::query(), $request)
+                ->selectRaw('attendances.attendance_date as label, COUNT(*) as total')
+                ->groupBy('attendances.attendance_date')
+                ->orderBy('attendances.attendance_date')
+                ->get();
         }
 
         return Inertia::render('admin/Reports/Index', [
             'attendances' => $attendances,
             'summary' => $summary,
+            'byClient' => $byClient,
+            'incidentsByServicePoint' => $incidentsByServicePoint,
+            'trend' => $trend,
             'clients' => Client::where('status', 'activo')->orderBy('name')->get(['id', 'name']),
             'servicePoints' => ServicePoint::where('status', 'activo')->orderBy('name')->get(['id', 'client_id', 'name']),
             'employees' => Employee::orderBy('name')->get(['id', 'client_id', 'employee_number', 'name', 'last_name']),

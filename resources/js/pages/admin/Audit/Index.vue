@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { router } from '@inertiajs/vue3';
 import { Eye, History, X } from '@lucide/vue';
-import type {ColumnDef} from '@tanstack/vue-table';
 import { computed, ref, watch } from 'vue';
-import AppDataTable from '@/components/AppDataTable.vue';
+import AppPagination from '@/components/AppPagination.vue';
 import DatePicker from '@/components/DatePicker.vue';
+import EmptyState from '@/components/EmptyState.vue';
 import FormField from '@/components/FormField.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import SearchableSelect from '@/components/SearchableSelect.vue';
@@ -12,7 +12,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useInertiaLoading } from '@/composables/useInertiaLoading';
 import { formatDateMx, formatDateTimeMx } from '@/lib/formatters';
+import { auditActionVisual } from '@/lib/status';
 import type { AttendanceAudit, PaginatedData } from '@/types/models';
 
 type SelectModel = string | number | null;
@@ -22,6 +25,8 @@ const props = defineProps<{
     users: { id: number; name: string }[];
     filters: Record<string, string | undefined>;
 }>();
+
+const { isLoading } = useInertiaLoading();
 
 const filterAction = ref<SelectModel>(props.filters.action ?? '');
 const filterChangedBy = ref<SelectModel>(props.filters.changed_by ?? '');
@@ -61,13 +66,6 @@ const clearFilters = () => {
 
 const onPage = (p: number) => router.get('/auditoria', { ...props.filters, page: p }, { preserveState: true });
 
-const actionColors: Record<string, string> = {
-    creado: 'bg-green-100 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-400',
-    actualizado: 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-400',
-    corregido: 'bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-950 dark:text-yellow-400',
-    eliminado: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-400',
-};
-
 const viewingAudit = ref<AttendanceAudit | null>(null);
 const showDetails = ref(false);
 
@@ -86,8 +84,8 @@ const FIELD_LABELS: Record<string, string> = {
 
 const diffKeys = (audit: AttendanceAudit | null) => {
     if (!audit) {
-return [];
-}
+        return [];
+    }
 
     const old = (audit.old_values ?? {}) as Record<string, unknown>;
     const fresh = (audit.new_values ?? {}) as Record<string, unknown>;
@@ -107,18 +105,26 @@ const formatFieldValue = (key: string, value: unknown): string => {
     return String(value);
 };
 
-const columns: ColumnDef<AttendanceAudit>[] = [
-    { accessorKey: 'created_at', header: 'Fecha/Hora' },
-    { accessorKey: 'action', header: 'Acción' },
-    { accessorKey: 'employee', header: 'Colaborador' },
-    { accessorKey: 'client', header: 'Empresa', cell: ({ row }) => row.original.attendance?.client?.name ?? '—' },
-    { accessorKey: 'changer', header: 'Realizó', cell: ({ row }) => row.original.changer?.name ?? '—' },
-    { accessorKey: 'reason', header: 'Motivo', cell: ({ getValue }) => getValue() || '—' },
-];
+/** Línea corta tipo "Estado: falta → presente, Entrada: — → 07:00". */
+const changeSummary = (audit: AttendanceAudit): string => {
+    const keys = diffKeys(audit);
+
+    if (!keys.length) {
+        return audit.reason ?? 'Sin cambios de campo registrados.';
+    }
+
+    const old = (audit.old_values ?? {}) as Record<string, unknown>;
+    const fresh = (audit.new_values ?? {}) as Record<string, unknown>;
+
+    return keys
+        .slice(0, 3)
+        .map((key) => `${FIELD_LABELS[key] ?? key}: ${formatFieldValue(key, old[key])} → ${formatFieldValue(key, fresh[key])}`)
+        .join(' · ');
+};
 </script>
 
 <template>
-    <div class="p-6">
+    <div class="w-full p-6">
         <PageHeader title="Auditoría" description="Registro de todas las acciones realizadas sobre asistencias" />
 
         <!-- Filters -->
@@ -138,39 +144,63 @@ const columns: ColumnDef<AttendanceAudit>[] = [
             </div>
         </div>
 
-        <AppDataTable
-            :columns="columns"
-            :data="audits.data"
-            :pagination="audits"
-            :searchable="false"
-            empty-title="Sin registros de auditoría"
-            empty-description="No hay cambios registrados para los filtros aplicados."
-            :empty-icon="History"
-            @page-change="onPage"
-        >
-            <template #cell-created_at="{ value }">
-                <span class="text-xs whitespace-nowrap">{{ formatDateTimeMx(value as string) }}</span>
-            </template>
-            <template #cell-action="{ item }">
-                <Badge variant="outline" :class="['text-xs', actionColors[item.action] ?? '']">
-                    {{ item.action }}
-                </Badge>
-            </template>
-            <template #cell-employee="{ item }">
-                <div class="text-sm">{{ item.attendance?.employee?.name }} {{ item.attendance?.employee?.last_name }}</div>
-                <div class="text-xs text-muted-foreground font-mono">{{ item.attendance?.employee?.employee_number }}</div>
-            </template>
-            <template #actions="{ item }">
-                <Button
-                    v-if="item.old_values || item.new_values"
-                    variant="ghost"
-                    size="sm"
-                    @click="openDetails(item)"
+        <template v-if="isLoading">
+            <div class="space-y-3">
+                <div v-for="i in 5" :key="i" class="rounded-xl border bg-card p-4 space-y-2">
+                    <Skeleton class="h-4 w-1/3" />
+                    <Skeleton class="h-3 w-2/3" />
+                </div>
+            </div>
+        </template>
+
+        <EmptyState
+            v-else-if="!audits.data.length"
+            title="Sin registros de auditoría"
+            description="No hay cambios registrados para los filtros aplicados."
+            :icon="History"
+        />
+
+        <template v-else>
+            <div class="space-y-3">
+                <div
+                    v-for="audit in audits.data"
+                    :key="audit.id"
+                    class="rounded-xl border bg-card p-4 shadow-sm transition-all hover:shadow-md hover:border-primary/30"
                 >
-                    <Eye class="h-4 w-4 mr-1.5" /> Ver cambios
-                </Button>
-            </template>
-        </AppDataTable>
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div class="min-w-0 flex-1 space-y-1.5">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <Badge variant="outline" :class="['text-xs', auditActionVisual(audit.action).badgeClass]">
+                                    {{ auditActionVisual(audit.action).label }}
+                                </Badge>
+                                <span class="text-xs text-muted-foreground whitespace-nowrap">{{ formatDateTimeMx(audit.created_at) }}</span>
+                            </div>
+                            <div class="text-sm">
+                                <span class="font-medium">{{ audit.attendance?.employee?.name }} {{ audit.attendance?.employee?.last_name }}</span>
+                                <span class="font-mono text-xs text-muted-foreground ml-2">{{ audit.attendance?.employee?.employee_number }}</span>
+                                <span v-if="audit.attendance?.client?.name" class="text-xs text-muted-foreground"> · {{ audit.attendance.client.name }}</span>
+                            </div>
+                            <p class="text-sm text-muted-foreground truncate">{{ changeSummary(audit) }}</p>
+                            <p class="text-xs text-muted-foreground">
+                                Realizó: <span class="font-medium text-foreground">{{ audit.changer?.name ?? '—' }}</span>
+                                <template v-if="audit.reason"> · Motivo: {{ audit.reason }}</template>
+                            </p>
+                        </div>
+                        <Button
+                            v-if="audit.old_values || audit.new_values"
+                            variant="ghost"
+                            size="sm"
+                            class="shrink-0"
+                            @click="openDetails(audit)"
+                        >
+                            <Eye class="h-4 w-4 mr-1.5" /> Ver detalle
+                        </Button>
+                    </div>
+                </div>
+            </div>
+
+            <AppPagination class="mt-4" :pagination="audits" @page-change="onPage" />
+        </template>
 
         <Sheet :open="showDetails" @update:open="showDetails = $event">
             <SheetContent class="sm:max-w-md">
