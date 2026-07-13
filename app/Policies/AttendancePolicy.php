@@ -31,4 +31,13 @@ class AttendancePolicy
     {
         return $user->can('Eliminar asistencias');
     }
+
+    /**
+     * Captura completa manual (crear o editar entrada/salida/estado en una sola pantalla):
+     * reservada a administradores, RH, o cualquiera con permiso explícito de corrección.
+     */
+    public function manualCapture(User $user): bool
+    {
+        return $user->hasRole('administrador') || $user->hasRole('rh') || $user->can('Corregir asistencias');
+    }
 }

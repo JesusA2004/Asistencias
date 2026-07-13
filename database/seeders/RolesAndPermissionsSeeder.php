@@ -74,6 +74,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'Ver puntos de servicio',
             'Ver asistencias',
             'Ver turnos',
+            'Registrar asistencias',
         ]);
 
         $adminUser = User::firstOrCreate(

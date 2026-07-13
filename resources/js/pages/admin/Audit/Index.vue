@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { router } from '@inertiajs/vue3';
-import { Eye, History, X } from '@lucide/vue';
+import { Eye, History, Pencil, Plus, RotateCcw, Trash2, X } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 import AppPagination from '@/components/AppPagination.vue';
 import DatePicker from '@/components/DatePicker.vue';
@@ -72,6 +72,13 @@ const showDetails = ref(false);
 const openDetails = (audit: AttendanceAudit) => {
     viewingAudit.value = audit;
     showDetails.value = true;
+};
+
+const ACTION_ICONS: Record<string, typeof Plus> = {
+    creado: Plus,
+    actualizado: Pencil,
+    corregido: RotateCcw,
+    eliminado: Trash2,
 };
 
 const FIELD_LABELS: Record<string, string> = {
@@ -170,7 +177,8 @@ const changeSummary = (audit: AttendanceAudit): string => {
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div class="min-w-0 flex-1 space-y-1.5">
                             <div class="flex flex-wrap items-center gap-2">
-                                <Badge variant="outline" :class="['text-xs', auditActionVisual(audit.action).badgeClass]">
+                                <Badge variant="outline" :class="['gap-1 text-xs', auditActionVisual(audit.action).badgeClass]">
+                                    <component :is="ACTION_ICONS[audit.action] ?? Plus" class="h-3 w-3" />
                                     {{ auditActionVisual(audit.action).label }}
                                 </Badge>
                                 <span class="text-xs text-muted-foreground whitespace-nowrap">{{ formatDateTimeMx(audit.created_at) }}</span>

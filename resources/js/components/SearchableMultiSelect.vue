@@ -55,9 +55,11 @@ const selectedOptions = computed(() => props.options.filter((o) => selectedSet.v
 
 const filteredOptions = computed(() => {
     const q = query.value.trim().toLowerCase();
+
     if (!q) {
         return props.options;
     }
+
     return props.options.filter((o) => `${o.label} ${o.description ?? ''}`.toLowerCase().includes(q));
 });
 
@@ -171,13 +173,21 @@ const clearAll = () => emit('update:modelValue', []);
             </PopoverContent>
         </Popover>
 
-        <div v-if="selectedOptions.length" class="mt-2 flex flex-wrap gap-1.5">
+        <TransitionGroup
+            v-if="selectedOptions.length"
+            tag="div"
+            class="mt-2 flex flex-wrap gap-1.5"
+            enter-active-class="transition duration-150 ease-out"
+            enter-from-class="opacity-0 scale-90"
+            leave-active-class="transition duration-100 ease-in absolute"
+            leave-to-class="opacity-0 scale-90"
+        >
             <Badge v-for="o in selectedOptions" :key="o.value" variant="outline" class="gap-1 pr-1 text-xs font-normal">
                 {{ o.label }}
                 <button type="button" class="rounded-full p-0.5 hover:bg-muted" @click="removeOne(o.value)">
                     <X class="h-3 w-3" />
                 </button>
             </Badge>
-        </div>
+        </TransitionGroup>
     </FormField>
 </template>

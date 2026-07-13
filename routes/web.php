@@ -81,7 +81,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // ── Asistencias ─────────────────────────────────────────────────
     Route::middleware('permission:Registrar asistencias')->group(function () {
         Route::get('/asistencias/capturar', [AttendanceCaptureController::class, 'index'])->name('asistencias.capturar');
-        Route::post('/asistencias/capturar', [AttendanceCaptureController::class, 'store'])->name('asistencias.capturar.store');
+        Route::post('/asistencias/capturar/entrada', [AttendanceCaptureController::class, 'storeEntry'])->name('asistencias.capturar.entrada');
+        Route::post('/asistencias/capturar/salida', [AttendanceCaptureController::class, 'storeExit'])->name('asistencias.capturar.salida');
+        Route::post('/asistencias/capturar/incidencia', [AttendanceCaptureController::class, 'storeIncident'])->name('asistencias.capturar.incidencia');
+        Route::post('/asistencias/capturar/manual', [AttendanceCaptureController::class, 'storeManual'])->name('asistencias.capturar.manual');
     });
 
     Route::middleware('permission:Ver asistencias')->group(function () {

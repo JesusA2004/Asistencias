@@ -1,29 +1,37 @@
 <script setup lang="ts">
-import { router, useForm } from '@inertiajs/vue3';
-import { AlertTriangle, CheckCircle2, ClipboardList, Users, X } from '@lucide/vue';
+import { router } from '@inertiajs/vue3';
+import { AlertTriangle, ClipboardList, Users } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
-import AttendanceBulkActions from '@/components/AttendanceBulkActions.vue';
-import AttendanceEmployeeCard from '@/components/AttendanceEmployeeCard.vue';
-import AttendanceFiltersToolbar from '@/components/AttendanceFiltersToolbar.vue';
+import AttendanceActionSelector from '@/components/AttendanceActionSelector.vue';
+import type {CaptureAction} from '@/components/AttendanceActionSelector.vue';
+import AttendanceContextToolbar from '@/components/AttendanceContextToolbar.vue';
+import AttendanceEmployeePicker from '@/components/AttendanceEmployeePicker.vue';
+import AttendanceEntryPanel from '@/components/AttendanceEntryPanel.vue';
+import type {EntryRecord} from '@/components/AttendanceEntryPanel.vue';
+import AttendanceExitPanel from '@/components/AttendanceExitPanel.vue';
+import type {ExitRecord} from '@/components/AttendanceExitPanel.vue';
+import AttendanceGuidedEmptyState from '@/components/AttendanceGuidedEmptyState.vue';
+import AttendanceIncidentPanel from '@/components/AttendanceIncidentPanel.vue';
+import AttendanceManualPanel from '@/components/AttendanceManualPanel.vue';
+import type {ManualRecord} from '@/components/AttendanceManualPanel.vue';
+import AttendanceProgressSummary from '@/components/AttendanceProgressSummary.vue';
 import AttendanceSummaryBar from '@/components/AttendanceSummaryBar.vue';
-import EmptyState from '@/components/EmptyState.vue';
 import PageHeader from '@/components/PageHeader.vue';
-import SearchableMultiSelect from '@/components/SearchableMultiSelect.vue';
-import StatusBadge from '@/components/StatusBadge.vue';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
 import { useInertiaLoading } from '@/composables/useInertiaLoading';
-import { formatDateMx } from '@/lib/formatters';
-import type { Attendance, AttendanceStatus, Client, Employee, ServicePoint } from '@/types/models';
+import { deriveCaptureState, nowTime, suggestEntryStatus } from '@/lib/attendance';
+import type { Attendance, AttendanceStatus, Client, Employee, ServicePoint, Shift } from '@/types/models';
+
+type EmployeeWithShift = Employee & { shift?: Pick<Shift, 'id' | 'name' | 'start_time' | 'end_time' | 'tolerance_minutes'> | null };
 
 const props = defineProps<{
     clients: Client[];
     servicePoints: (ServicePoint & { client_id: number })[];
-    employees: (Employee & { shift?: { id: number; name: string } | null })[];
+    employees: EmployeeWithShift[];
     existingAttendances: Record<number, Attendance>;
     filters: { client_id?: string; service_point_id?: string; date?: string };
     hasAssignments: boolean;
+    canUseManualCapture: boolean;
 }>();
 
 const { isLoading } = useInertiaLoading();
@@ -32,150 +40,350 @@ const today = new Date().toISOString().split('T')[0];
 const selectedClient = ref(props.filters.client_id ?? '');
 const selectedSP = ref(props.filters.service_point_id ?? '');
 const selectedDate = ref(props.filters.date ?? today);
+const shiftFilter = ref<string | number | null>('');
 
-// Los puntos de servicio ya vienen todos cargados desde el backend; se filtran
-// aquí por empresa sin recargar la página (instantáneo, no se siente lento).
+const action = ref<CaptureAction | null>(null);
+const selectedEmployeeIds = ref<number[]>([]);
+const entryRecords = ref<Record<number, EntryRecord>>({});
+const exitRecords = ref<Record<number, ExitRecord>>({});
+const manualRecords = ref<Record<number, ManualRecord>>({});
+const incidentStatus = ref<AttendanceStatus | null>(null);
+const incidentNotes = ref('');
+const manualReason = ref('');
+const saving = ref(false);
+
 const filteredServicePoints = computed(() =>
     props.servicePoints.filter((sp) => !selectedClient.value || String(sp.client_id) === String(selectedClient.value)),
 );
 
 const clientOptions = computed(() => props.clients.map((c) => ({ value: c.id, label: c.name })));
 const servicePointOptions = computed(() => filteredServicePoints.value.map((sp) => ({ value: sp.id, label: sp.name })));
+const shiftOptions = computed(() => {
+    const seen = new Map<number, string>();
 
-interface RecordEntry {
-    employee_id: number;
-    status: AttendanceStatus;
-    entry_time: string;
-    exit_time: string;
-    notes: string;
-}
-
-const selectedEmployeeIds = ref<number[]>([]);
-const records = ref<Map<number, RecordEntry>>(new Map());
-
-const isAlreadySaved = (employeeId: number) => !!props.existingAttendances[employeeId];
-const savedStatus = (employeeId: number) => props.existingAttendances[employeeId]?.status;
-
-const employeesById = computed(() => new Map(props.employees.map((e) => [e.id, e])));
-const alreadySavedEmployees = computed(() => props.employees.filter((e) => isAlreadySaved(e.id)));
-const availableEmployees = computed(() => props.employees.filter((e) => !isAlreadySaved(e.id)));
-
-const employeeOptions = computed(() =>
-    availableEmployees.value.map((e) => ({
-        value: e.id,
-        label: `${e.name} ${e.last_name}`,
-        description: e.employee_number,
-    })),
-);
-
-// Mantiene `records` sincronizado con la selección de colaboradores, sin perder
-// lo ya capturado para los que siguen seleccionados.
-watch(selectedEmployeeIds, (ids) => {
-    const next = new Map<number, RecordEntry>();
-
-    for (const id of ids) {
-        next.set(id, records.value.get(id) ?? {
-            employee_id: id,
-            status: 'presente',
-            entry_time: '',
-            exit_time: '',
-            notes: '',
-        });
+    for (const e of props.employees) {
+        if (e.shift) {
+            seen.set(e.shift.id, e.shift.name);
+        }
     }
 
-    records.value = next;
-}, { deep: false });
-
-const recordList = computed(() => selectedEmployeeIds.value.map((id) => records.value.get(id)!).filter(Boolean));
-
-const addAllFromPoint = () => {
-    const allIds = availableEmployees.value.map((e) => e.id);
-    selectedEmployeeIds.value = Array.from(new Set([...selectedEmployeeIds.value, ...allIds]));
-};
-
-const clearSelection = () => {
-    selectedEmployeeIds.value = [];
-};
-
-const markSelected = (status: AttendanceStatus) => {
-    recordList.value.forEach((r) => {
-        r.status = status;
-    });
-};
-
-const markAll = (status: AttendanceStatus) => {
-    const allIds = availableEmployees.value.map((e) => e.id);
-    const next = new Map<number, RecordEntry>();
-
-    for (const id of allIds) {
-        const existing = records.value.get(id);
-        next.set(id, existing ? { ...existing, status } : { employee_id: id, status, entry_time: '', exit_time: '', notes: '' });
-    }
-
-    records.value = next;
-    selectedEmployeeIds.value = allIds;
-};
-
-const clearStates = () => {
-    recordList.value.forEach((r) => {
-        r.status = 'presente';
-        r.entry_time = '';
-        r.exit_time = '';
-        r.notes = '';
-    });
-};
-
-const form = useForm({
-    client_id: selectedClient.value,
-    service_point_id: selectedSP.value,
-    attendance_date: selectedDate.value,
-    records: [] as RecordEntry[],
+    return Array.from(seen, ([value, label]) => ({ value, label }));
 });
 
-const loadEmployees = () => {
+const employeesById = computed(() => new Map(props.employees.map((e) => [e.id, e])));
+
+const employeesByShift = computed(() =>
+    props.employees.filter((e) => !shiftFilter.value || String(e.shift_id) === String(shiftFilter.value)),
+);
+
+const stateOf = (employeeId: number) => deriveCaptureState(props.existingAttendances[employeeId]);
+
+const entradaEligible = computed(() => employeesByShift.value.filter((e) => stateOf(e.id) === 'sin_registro'));
+const salidaEligible = computed(() => employeesByShift.value.filter((e) => stateOf(e.id) === 'pendiente_salida'));
+const incidenciaEligible = computed(() => employeesByShift.value.filter((e) => stateOf(e.id) === 'sin_registro'));
+const manualEligible = computed(() => employeesByShift.value);
+
+const actionCounts = computed(() => ({
+    entrada: entradaEligible.value.length,
+    salida: salidaEligible.value.length,
+    incidencia: incidenciaEligible.value.length,
+    manual: manualEligible.value.length,
+}));
+
+const currentEligible = computed<EmployeeWithShift[]>(() => {
+    switch (action.value) {
+        case 'entrada': return entradaEligible.value;
+        case 'salida': return salidaEligible.value;
+        case 'incidencia': return incidenciaEligible.value;
+        case 'manual': return manualEligible.value;
+        default: return [];
+    }
+});
+
+const pickerOptions = computed(() =>
+    currentEligible.value.map((e) => ({ value: e.id, label: `${e.name} ${e.last_name}`, description: e.employee_number })),
+);
+
+const contextMessages = computed(() => {
+    if (!selectedClient.value || !selectedSP.value) {
+        return [];
+    }
+
+    const total = employeesByShift.value.length;
+
+    if (!total) {
+        return [];
+    }
+
+    const withRecord = employeesByShift.value.filter((e) => stateOf(e.id) !== 'sin_registro').length;
+    const complete = employeesByShift.value.filter((e) => stateOf(e.id) === 'completo').length;
+    const msgs = [`Hay ${total} colaborador(es) activo(s) en este punto.`];
+
+    if (withRecord) {
+        msgs.push(`${withRecord} ya tienen algún registro para esta fecha.`);
+    }
+
+    if (complete) {
+        msgs.push(`${complete} tienen asistencia completa (entrada y salida).`);
+    }
+
+    return msgs;
+});
+
+const currentStep = computed<1 | 2 | 3 | 4>(() => {
+    if (!selectedClient.value || !selectedSP.value) {
+        return 1;
+    }
+
+    if (!action.value) {
+        return 2;
+    }
+
+    if (!selectedEmployeeIds.value.length) {
+        return 3;
+    }
+
+    return 4;
+});
+
+// Cambiar de acción reinicia la selección y el estado capturado de las demás acciones.
+watch(action, () => {
     selectedEmployeeIds.value = [];
+    entryRecords.value = {};
+    exitRecords.value = {};
+    manualRecords.value = {};
+    incidentStatus.value = null;
+    incidentNotes.value = '';
+    manualReason.value = '';
+});
+
+watch(selectedEmployeeIds, (ids) => {
+    if (action.value === 'entrada') {
+        const next: Record<number, EntryRecord> = {};
+
+        for (const id of ids) {
+            const emp = employeesById.value.get(id);
+            const time = entryRecords.value[id]?.entry_time ?? nowTime();
+            next[id] = entryRecords.value[id] ?? {
+                entry_time: time,
+                status: suggestEntryStatus(time, emp?.shift ?? undefined),
+                notes: '',
+            };
+        }
+
+        entryRecords.value = next;
+    } else if (action.value === 'salida') {
+        const next: Record<number, ExitRecord> = {};
+
+        for (const id of ids) {
+            next[id] = exitRecords.value[id] ?? { exit_time: nowTime(), notes: '' };
+        }
+
+        exitRecords.value = next;
+    } else if (action.value === 'manual') {
+        const next: Record<number, ManualRecord> = {};
+
+        for (const id of ids) {
+            const existing = props.existingAttendances[id];
+            next[id] = manualRecords.value[id] ?? {
+                status: existing?.status ?? 'presente',
+                entry_time: existing?.entry_time ?? '',
+                exit_time: existing?.exit_time ?? '',
+                notes: existing?.notes ?? '',
+            };
+        }
+
+        manualRecords.value = next;
+    }
+});
+
+const updateEntryRecord = (id: number, patch: Partial<EntryRecord>) => {
+    entryRecords.value = { ...entryRecords.value, [id]: { ...entryRecords.value[id], ...patch } };
+};
+const updateExitRecord = (id: number, patch: Partial<ExitRecord>) => {
+    exitRecords.value = { ...exitRecords.value, [id]: { ...exitRecords.value[id], ...patch } };
+};
+const updateManualRecord = (id: number, patch: Partial<ManualRecord>) => {
+    manualRecords.value = { ...manualRecords.value, [id]: { ...manualRecords.value[id], ...patch } };
+};
+
+const selectedEntryEmployees = computed(() => selectedEmployeeIds.value.map((id) => {
+    const e = employeesById.value.get(id)!;
+
+    return { id: e.id, name: `${e.name} ${e.last_name}`, employeeNumber: e.employee_number, shiftName: e.shift?.name };
+}));
+
+const selectedExitEmployees = computed(() => selectedEmployeeIds.value.map((id) => {
+    const e = employeesById.value.get(id)!;
+
+    return {
+        id: e.id, name: `${e.name} ${e.last_name}`, employeeNumber: e.employee_number, shiftName: e.shift?.name,
+        entryTime: props.existingAttendances[id]?.entry_time ?? null,
+    };
+}));
+
+const selectedManualEmployees = computed(() => selectedEmployeeIds.value.map((id) => {
+    const e = employeesById.value.get(id)!;
+
+    return {
+        id: e.id, name: `${e.name} ${e.last_name}`, employeeNumber: e.employee_number, shiftName: e.shift?.name,
+        hasExisting: !!props.existingAttendances[id],
+    };
+}));
+
+const selectedIncidentNames = computed(() => selectedEmployeeIds.value.map((id) => {
+    const e = employeesById.value.get(id)!;
+
+    return `${e.name} ${e.last_name}`;
+}));
+
+const manualAnyExisting = computed(() => selectedEmployeeIds.value.some((id) => !!props.existingAttendances[id]));
+
+const incidentRequiresNotes = computed(() => incidentStatus.value === 'permiso' || incidentStatus.value === 'incapacidad');
+
+const canSubmit = computed(() => {
+    if (!selectedEmployeeIds.value.length) {
+        return false;
+    }
+
+    if (action.value === 'incidencia') {
+        if (!incidentStatus.value) {
+            return false;
+        }
+
+        if (incidentRequiresNotes.value && incidentNotes.value.trim().length < 5) {
+            return false;
+        }
+
+        return true;
+    }
+
+    if (action.value === 'manual' && manualAnyExisting.value && manualReason.value.trim().length < 10) {
+        return false;
+    }
+
+    return true;
+});
+
+const summaryLabel = computed(() => ({
+    entrada: 'listos para registrar entrada',
+    salida: 'listos para registrar salida',
+    incidencia: 'seleccionados para la incidencia',
+    manual: 'seleccionados para captura manual',
+}[action.value ?? 'entrada']));
+
+const submitLabel = computed(() => ({
+    entrada: 'Registrar entrada',
+    salida: 'Registrar salida',
+    incidencia: 'Guardar incidencia',
+    manual: 'Guardar captura manual',
+}[action.value ?? 'entrada']));
+
+const handleFlash = (page: unknown) => {
+    const props = (page as { props?: Record<string, unknown> })?.props ?? {};
+    const flash = (props.flash ?? {}) as { success?: string | null; error?: string | null };
+
+    if (flash.success) {
+        toast.success(flash.success);
+    }
+
+    if (flash.error) {
+        toast.error(flash.error);
+    }
+};
+
+const loadEmployees = (notify = false) => {
+    const hadSelection = selectedEmployeeIds.value.length > 0;
+    selectedEmployeeIds.value = [];
+    action.value = null;
     router.get('/asistencias/capturar', {
         client_id: selectedClient.value || undefined,
         service_point_id: selectedSP.value || undefined,
         date: selectedDate.value,
-    }, { preserveState: true, replace: true });
+    }, {
+        preserveState: true,
+        replace: true,
+        onSuccess: () => {
+            if (notify && hadSelection) {
+                toast.message('Se limpió la selección de colaboradores al cambiar de contexto.');
+            }
+        },
+    });
 };
 
 const onClientChange = (value: string | number | null) => {
     selectedClient.value = value == null ? '' : String(value);
     selectedSP.value = '';
-    loadEmployees();
+    loadEmployees(true);
 };
 
 const onServicePointChange = (value: string | number | null) => {
     selectedSP.value = value == null ? '' : String(value);
-    loadEmployees();
+    loadEmployees(true);
 };
 
 const onDateChange = (value: string | null) => {
     selectedDate.value = value ?? today;
-    loadEmployees();
+    loadEmployees(false);
 };
 
 const submit = () => {
-    form.client_id = selectedClient.value;
-    form.service_point_id = selectedSP.value;
-    form.attendance_date = selectedDate.value;
-    form.records = recordList.value;
-    form.post('/asistencias/capturar', {
-        onSuccess: (page) => {
-            selectedEmployeeIds.value = [];
-            const flash = (page.props.flash ?? {}) as { success?: string | null; error?: string | null };
+    if (!canSubmit.value || !action.value) {
+        return;
+    }
 
-            if (flash.success) {
-                toast.success(flash.success);
-            }
+    saving.value = true;
 
-            if (flash.error) {
-                toast.error(flash.error);
-            }
-        },
-    });
+    const base = {
+        client_id: selectedClient.value,
+        service_point_id: selectedSP.value,
+        attendance_date: selectedDate.value,
+    };
+
+    const onFinish = () => {
+ saving.value = false; 
+};
+    const onSuccess = (page: unknown) => {
+        handleFlash(page);
+        selectedEmployeeIds.value = [];
+    };
+
+    if (action.value === 'entrada') {
+        router.post('/asistencias/capturar/entrada', {
+            ...base,
+            entries: selectedEmployeeIds.value.map((id) => ({ employee_id: id, ...entryRecords.value[id] })),
+        }, { preserveScroll: true, onSuccess, onFinish });
+    } else if (action.value === 'salida') {
+        router.post('/asistencias/capturar/salida', {
+            ...base,
+            exits: selectedEmployeeIds.value.map((id) => ({ employee_id: id, ...exitRecords.value[id] })),
+        }, { preserveScroll: true, onSuccess, onFinish });
+    } else if (action.value === 'incidencia') {
+        router.post('/asistencias/capturar/incidencia', {
+            ...base,
+            status: incidentStatus.value,
+            notes: incidentNotes.value || undefined,
+            employee_ids: selectedEmployeeIds.value,
+        }, {
+            preserveScroll: true,
+            onSuccess: (page) => {
+ onSuccess(page); incidentStatus.value = null; incidentNotes.value = ''; 
+},
+            onFinish,
+        });
+    } else if (action.value === 'manual') {
+        router.post('/asistencias/capturar/manual', {
+            ...base,
+            reason: manualReason.value || undefined,
+            records: selectedEmployeeIds.value.map((id) => ({ employee_id: id, ...manualRecords.value[id] })),
+        }, {
+            preserveScroll: true,
+            onSuccess: (page) => {
+ onSuccess(page); manualReason.value = ''; 
+},
+            onFinish,
+        });
+    }
 };
 
 const noClientsMessage = computed(() =>
@@ -189,7 +397,7 @@ const noClientsMessage = computed(() =>
     <div class="w-full p-6">
         <PageHeader title="Capturar Asistencia" description="Registra la asistencia diaria de tus colaboradores" />
 
-        <EmptyState
+        <AttendanceGuidedEmptyState
             v-if="!clients.length"
             title="Sin empresas disponibles"
             :description="noClientsMessage"
@@ -197,121 +405,114 @@ const noClientsMessage = computed(() =>
         />
 
         <template v-else>
-            <AttendanceFiltersToolbar
+            <AttendanceProgressSummary :current-step="currentStep" />
+
+            <AttendanceContextToolbar
                 class="mb-6"
                 :client-id="selectedClient"
                 :service-point-id="selectedSP"
                 :date="selectedDate"
+                :shift-filter="shiftFilter"
                 :client-options="clientOptions"
                 :service-point-options="servicePointOptions"
+                :shift-options="shiftOptions"
                 :max-date="today"
                 :loading="isLoading"
+                :messages="contextMessages"
                 @update:client-id="onClientChange"
                 @update:service-point-id="onServicePointChange"
                 @update:date="onDateChange"
+                @update:shift-filter="shiftFilter = $event"
             />
 
-            <template v-if="selectedClient && selectedSP">
-                <!-- Paso 2: elegir colaboradores -->
-                <div class="mb-6 space-y-2 rounded-xl border bg-card p-5 shadow-sm">
-                    <h2 class="mb-1 text-sm font-semibold text-foreground">Paso 2 · Selecciona colaboradores</h2>
-                    <SearchableMultiSelect
-                        v-model="selectedEmployeeIds"
-                        :options="employeeOptions"
-                        search-placeholder="Buscar por nombre, apellido o número de empleado..."
-                        empty-text="No hay colaboradores disponibles"
+            <template v-if="!selectedClient || !selectedSP">
+                <AttendanceGuidedEmptyState
+                    title="¿Dónde vas a capturar?"
+                    description="Selecciona empresa y punto para cargar colaboradores."
+                    :icon="ClipboardList"
+                />
+            </template>
+            <template v-else-if="!employeesByShift.length">
+                <AttendanceGuidedEmptyState
+                    title="No hay colaboradores activos"
+                    description="Este punto de servicio no tiene colaboradores activos disponibles para capturar."
+                    :icon="Users"
+                />
+            </template>
+            <template v-else>
+                <div class="mb-6">
+                    <AttendanceActionSelector
+                        v-model="action"
+                        :counts="actionCounts"
+                        :can-use-manual="canUseManualCapture"
                     />
-                    <div class="flex flex-wrap gap-2 pt-1">
-                        <Button type="button" variant="outline" size="sm" @click="addAllFromPoint">
-                            <Users class="mr-1.5 h-3.5 w-3.5" /> Seleccionar todos los colaboradores del punto
-                        </Button>
-                        <Button v-if="selectedEmployeeIds.length" type="button" variant="ghost" size="sm" @click="clearSelection">
-                            <X class="mr-1.5 h-3.5 w-3.5" /> Limpiar selección
-                        </Button>
-                    </div>
                 </div>
 
-                <!-- Ya registrados -->
-                <Alert v-if="alreadySavedEmployees.length" class="mb-6 border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40">
-                    <CheckCircle2 class="h-4 w-4 text-amber-600" />
-                    <AlertDescription class="text-amber-700 dark:text-amber-400">
-                        <p class="mb-2">
-                            {{ alreadySavedEmployees.length }} colaborador(es) ya tienen asistencia registrada el {{ formatDateMx(selectedDate) }}. No se pueden volver a capturar.
-                        </p>
-                        <div class="flex flex-wrap gap-2">
-                            <div
-                                v-for="e in alreadySavedEmployees"
-                                :key="e.id"
-                                class="flex items-center gap-1.5 rounded-full border border-amber-200 bg-background/60 py-0.5 pr-1 pl-2 dark:border-amber-900"
-                            >
-                                <span class="text-xs">{{ e.name }} {{ e.last_name }}</span>
-                                <StatusBadge :status="savedStatus(e.id)!" />
-                            </div>
+                <template v-if="action">
+                    <template v-if="!currentEligible.length">
+                        <AttendanceGuidedEmptyState
+                            title="No hay colaboradores elegibles para esta acción"
+                            description="Prueba con otra acción o cambia el filtro de turno arriba."
+                            next-step-hint="Elige otra acción en el paso 2."
+                            :icon="Users"
+                        />
+                    </template>
+                    <template v-else>
+                        <div class="mb-6">
+                            <AttendanceEmployeePicker v-model="selectedEmployeeIds" :options="pickerOptions" />
                         </div>
-                    </AlertDescription>
-                </Alert>
 
-                <template v-if="!availableEmployees.length">
-                    <EmptyState
-                        title="No hay colaboradores activos"
-                        description="Este punto de servicio no tiene colaboradores activos disponibles para capturar."
-                    />
-                </template>
-                <template v-else-if="!recordList.length">
-                    <EmptyState
-                        title="Selecciona colaboradores para comenzar"
-                        description="Busca y selecciona uno o varios colaboradores arriba para agregarlos a la lista de captura."
-                        :icon="ClipboardList"
-                    />
-                </template>
-                <template v-else>
-                    <!-- Paso 3: acciones masivas -->
-                    <div class="mb-4">
-                        <AttendanceBulkActions
-                            :selected-count="selectedEmployeeIds.length"
-                            :has-records="!!recordList.length"
-                            @mark-selected="markSelected"
-                            @mark-all="markAll"
-                            @clear-states="clearStates"
-                            @add-all="addAllFromPoint"
-                        />
-                    </div>
+                        <template v-if="!selectedEmployeeIds.length">
+                            <AttendanceGuidedEmptyState
+                                title="Selecciona colaboradores para continuar"
+                                description="Busca y selecciona uno o varios colaboradores arriba para capturar su información."
+                                next-step-hint="Usa el buscador o 'Seleccionar todos los disponibles'."
+                                :icon="ClipboardList"
+                            />
+                        </template>
+                        <template v-else>
+                            <AttendanceEntryPanel
+                                v-if="action === 'entrada'"
+                                :employees="selectedEntryEmployees"
+                                :records="entryRecords"
+                                @update="updateEntryRecord"
+                            />
+                            <AttendanceExitPanel
+                                v-else-if="action === 'salida'"
+                                :employees="selectedExitEmployees"
+                                :records="exitRecords"
+                                @update="updateExitRecord"
+                            />
+                            <AttendanceIncidentPanel
+                                v-else-if="action === 'incidencia'"
+                                :employee-names="selectedIncidentNames"
+                                :status="incidentStatus"
+                                :notes="incidentNotes"
+                                @update:status="incidentStatus = $event"
+                                @update:notes="incidentNotes = $event"
+                            />
+                            <AttendanceManualPanel
+                                v-else-if="action === 'manual'"
+                                :employees="selectedManualEmployees"
+                                :records="manualRecords"
+                                :reason="manualReason"
+                                :any-existing="manualAnyExisting"
+                                @update="updateManualRecord"
+                                @update:reason="manualReason = $event"
+                            />
 
-                    <!-- Paso 4: lista de captura -->
-                    <div class="grid grid-cols-1 gap-3 xl:grid-cols-2">
-                        <AttendanceEmployeeCard
-                            v-for="record in recordList"
-                            :key="record.employee_id"
-                            :name="`${employeesById.get(record.employee_id)?.name} ${employeesById.get(record.employee_id)?.last_name}`"
-                            :employee-number="employeesById.get(record.employee_id)?.employee_number ?? ''"
-                            :shift-name="employeesById.get(record.employee_id)?.shift?.name"
-                            :status="record.status"
-                            :entry-time="record.entry_time"
-                            :exit-time="record.exit_time"
-                            :notes="record.notes"
-                            @update:status="record.status = $event"
-                            @update:entry-time="record.entry_time = $event"
-                            @update:exit-time="record.exit_time = $event"
-                            @update:notes="record.notes = $event"
-                        />
-                    </div>
-
-                    <AttendanceSummaryBar
-                        :total-selected="selectedEmployeeIds.length"
-                        :total-new="recordList.length"
-                        :total-already-registered="alreadySavedEmployees.length"
-                        :saving="form.processing"
-                        @save="submit"
-                    />
+                            <AttendanceSummaryBar
+                                :count="selectedEmployeeIds.length"
+                                :count-label="summaryLabel"
+                                :submit-label="submitLabel"
+                                :saving="saving"
+                                :disabled="!canSubmit"
+                                @save="submit"
+                            />
+                        </template>
+                    </template>
                 </template>
             </template>
-
-            <EmptyState
-                v-else
-                title="Selecciona empresa, punto y fecha para comenzar"
-                description="Elige la empresa, el punto de servicio y la fecha arriba para cargar a los colaboradores."
-                :icon="ClipboardList"
-            />
         </template>
     </div>
 </template>

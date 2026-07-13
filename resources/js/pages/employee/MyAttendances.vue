@@ -9,11 +9,13 @@ import KPICard from '@/components/KPICard.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import SearchableSelect from '@/components/SearchableSelect.vue';
 import StatusBadge from '@/components/StatusBadge.vue';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useInertiaLoading } from '@/composables/useInertiaLoading';
+import { captureStateLabel, captureStateVisual, deriveCaptureState } from '@/lib/attendance';
 import { formatDateMx, formatTimeMx } from '@/lib/formatters';
-import { ATTENDANCE_STATUS_OPTIONS } from '@/lib/status';
+import { ATTENDANCE_STATUS_HEX, ATTENDANCE_STATUS_OPTIONS } from '@/lib/status';
 import type { Attendance, Employee } from '@/types/models';
 
 const props = defineProps<{
@@ -32,6 +34,11 @@ const status = ref<string | number | null>(props.filters.status ?? '');
 const statusOptions = ATTENDANCE_STATUS_OPTIONS;
 
 const hasActiveFilters = computed(() => !!(status.value));
+
+const todayStr = new Date().toISOString().split('T')[0];
+const todayAttendance = computed(() => props.attendances?.find((a) => a.attendance_date === todayStr) ?? null);
+const todayState = computed(() => deriveCaptureState(todayAttendance.value));
+const todayVisual = computed(() => captureStateVisual(todayState.value));
 
 const reload = () => {
     router.get('/mis-asistencias', {
@@ -84,6 +91,26 @@ const clearFilters = () => {
                 </CardContent>
             </Card>
 
+            <!-- Hoy -->
+            <Card class="mb-6 border-0 shadow-sm transition-all hover:shadow-md">
+                <CardContent class="flex flex-wrap items-center justify-between gap-4 p-4">
+                    <div>
+                        <p class="text-xs text-muted-foreground">Hoy · {{ formatDateMx(todayStr) }}</p>
+                        <p class="font-semibold">{{ captureStateLabel(todayAttendance) }}</p>
+                    </div>
+                    <div v-if="employee.shift" class="text-right">
+                        <p class="text-xs text-muted-foreground">Turno asignado</p>
+                        <p class="font-medium">
+                            {{ employee.shift.name }}
+                            <span class="font-mono text-xs text-muted-foreground">
+                                ({{ formatTimeMx(employee.shift.start_time) }}–{{ formatTimeMx(employee.shift.end_time) }})
+                            </span>
+                        </p>
+                    </div>
+                    <Badge variant="outline" :class="['text-xs', todayVisual.badgeClass]">{{ todayVisual.label }}</Badge>
+                </CardContent>
+            </Card>
+
             <!-- Filters -->
             <div class="mb-6 grid grid-cols-2 gap-3 rounded-xl border bg-muted/30 p-4 md:grid-cols-4">
                 <FormField label="Desde">
@@ -121,12 +148,17 @@ const clearFilters = () => {
                         description="No hay asistencias registradas para el rango de fechas y filtros seleccionados."
                         :icon="Calendar"
                     />
-                    <div v-else class="divide-y">
+                    <div v-else class="relative">
+                        <div class="absolute bottom-0 left-[15px] top-0 w-px bg-border" />
                         <div
                             v-for="a in attendances"
                             :key="a.id"
-                            class="flex flex-col gap-3 p-4 transition-colors hover:bg-muted/40 sm:flex-row sm:items-center sm:justify-between"
+                            class="relative flex flex-col gap-3 border-b py-4 pl-9 pr-4 transition-colors last:border-b-0 hover:bg-muted/40 sm:flex-row sm:items-center sm:justify-between"
                         >
+                            <span
+                                class="absolute left-[10px] top-5 h-2.5 w-2.5 rounded-full ring-4 ring-card"
+                                :style="{ backgroundColor: ATTENDANCE_STATUS_HEX[a.status] ?? '#9ca3af' }"
+                            />
                             <div>
                                 <p class="text-sm font-medium">{{ formatDateMx(a.attendance_date) }}</p>
                                 <p class="text-xs text-muted-foreground">{{ a.service_point?.name ?? '—' }}</p>

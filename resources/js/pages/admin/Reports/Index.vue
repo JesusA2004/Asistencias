@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { router } from '@inertiajs/vue3';
-import { AlertTriangle, BarChart3, Download, FileText, Search, X } from '@lucide/vue';
+import { AlertTriangle, BarChart3, ChevronDown, Download, FileText, Search, X } from '@lucide/vue';
 import type {ColumnDef} from '@tanstack/vue-table';
 import { computed, ref, watch } from 'vue';
 import AppChart from '@/components/AppChart.vue';
@@ -11,9 +11,20 @@ import PageHeader from '@/components/PageHeader.vue';
 import SearchableSelect from '@/components/SearchableSelect.vue';
 import StatusBadge from '@/components/StatusBadge.vue';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { usePermissions } from '@/composables/usePermissions';
@@ -131,6 +142,23 @@ const trendOptions = computed(() => ({
 
 const hasChartData = computed(() => !!(props.byClient?.length || props.incidentsByServicePoint?.length || props.trend?.length));
 
+const filtersOpen = ref(true);
+const pdfConfirmOpen = ref(false);
+
+const isLargeReport = computed(() => !!(props.summary && props.summary.total > 1000));
+
+const onPdfClick = (e: MouseEvent) => {
+    if (isLargeReport.value) {
+        e.preventDefault();
+        pdfConfirmOpen.value = true;
+    }
+};
+
+const confirmPdfExport = () => {
+    pdfConfirmOpen.value = false;
+    window.open(`/reportes/pdf?${exportParams()}`, '_blank');
+};
+
 const hasActiveFilters = computed(() =>
     !!(clientId.value || spId.value || employeeId.value || supervisorId.value || shiftId.value
         || status.value || search.value || onlyIncidents.value || onlyPresent.value),
@@ -225,10 +253,17 @@ const columns: ColumnDef<Attendance>[] = [
         <PageHeader title="Reportes de Asistencia" description="Filtra y exporta reportes por rango de fechas">
             <template #actions>
                 <template v-if="hasPermission('Exportar reportes') && hasValidRange">
-                    <Button variant="outline" as="a" :href="`/reportes/excel?${exportParams()}`">
+                    <Button variant="outline" as="a" :href="`/reportes/excel?${exportParams()}`" title="Recomendado para reportes grandes">
                         <Download class="h-4 w-4 mr-2" /> Excel
                     </Button>
-                    <Button variant="outline" as="a" :href="`/reportes/pdf?${exportParams()}`" target="_blank">
+                    <Button
+                        variant="outline"
+                        as="a"
+                        :href="`/reportes/pdf?${exportParams()}`"
+                        target="_blank"
+                        title="Recomendado para reportes ejecutivos"
+                        @click="onPdfClick"
+                    >
                         <FileText class="h-4 w-4 mr-2" /> PDF
                     </Button>
                 </template>
@@ -236,7 +271,12 @@ const columns: ColumnDef<Attendance>[] = [
         </PageHeader>
 
         <!-- Filters -->
-        <div class="space-y-3 mb-6 bg-muted/30 p-4 rounded-lg border">
+        <Collapsible v-model:open="filtersOpen" class="mb-6 rounded-lg border bg-muted/30 p-4">
+            <CollapsibleTrigger class="flex w-full items-center justify-between text-sm font-semibold text-foreground">
+                <span>Filtros</span>
+                <ChevronDown :class="['h-4 w-4 transition-transform', filtersOpen ? 'rotate-180' : '']" />
+            </CollapsibleTrigger>
+            <CollapsibleContent class="mt-3 space-y-3">
             <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <FormField label="Desde" required>
                     <DatePicker v-model="dateFrom" placeholder="Fecha inicial" />
@@ -272,11 +312,13 @@ const columns: ColumnDef<Attendance>[] = [
                     <X class="h-3.5 w-3.5 mr-1" /> Limpiar filtros
                 </Button>
             </div>
-        </div>
+            </CollapsibleContent>
+        </Collapsible>
 
         <div v-if="!hasValidRange" class="text-center py-16 text-muted-foreground border rounded-lg border-dashed">
             <BarChart3 class="h-8 w-8 mx-auto mb-2 opacity-50" />
-            Selecciona un rango de fechas para generar el reporte.
+            <p>Selecciona un rango de fechas para comenzar.</p>
+            <p class="mt-1 text-xs">Usa Excel para reportes grandes · PDF recomendado para reportes ejecutivos.</p>
         </div>
 
         <template v-else>
@@ -322,19 +364,23 @@ const columns: ColumnDef<Attendance>[] = [
             <!-- Gráficas -->
             <div v-if="hasChartData" class="grid grid-cols-1 gap-4 mb-6 lg:grid-cols-2">
                 <Card class="border-0 shadow-sm p-4">
-                    <h3 class="text-sm font-semibold mb-2">Distribución de estados</h3>
+                    <h3 class="text-sm font-semibold">Distribución de estados</h3>
+                    <p class="mb-2 text-xs text-muted-foreground">Proporción de cada estado en el periodo filtrado</p>
                     <AppChart type="donut" :series="statusDonutSeries" :options="statusDonutOptions" :height="280" />
                 </Card>
                 <Card class="border-0 shadow-sm p-4">
-                    <h3 class="text-sm font-semibold mb-2">Asistencias por empresa</h3>
+                    <h3 class="text-sm font-semibold">Asistencias por empresa</h3>
+                    <p class="mb-2 text-xs text-muted-foreground">Total de registros por empresa en el periodo filtrado</p>
                     <AppChart type="bar" :series="byClientSeries" :options="byClientOptions" :height="280" />
                 </Card>
                 <Card class="border-0 shadow-sm p-4">
-                    <h3 class="text-sm font-semibold mb-2">Incidencias por punto de servicio</h3>
+                    <h3 class="text-sm font-semibold">Incidencias por punto de servicio</h3>
+                    <p class="mb-2 text-xs text-muted-foreground">Faltas y retardos agrupados por ubicación</p>
                     <AppChart type="bar" :series="incidentsSeries" :options="incidentsOptions" :height="280" />
                 </Card>
                 <Card class="border-0 shadow-sm p-4">
-                    <h3 class="text-sm font-semibold mb-2">Tendencia de registros por fecha</h3>
+                    <h3 class="text-sm font-semibold">Tendencia de registros por fecha</h3>
+                    <p class="mb-2 text-xs text-muted-foreground">Volumen diario de asistencias capturadas</p>
                     <AppChart type="area" :series="trendSeries" :options="trendOptions" :height="280" />
                 </Card>
             </div>
@@ -361,5 +407,21 @@ const columns: ColumnDef<Attendance>[] = [
                 </template>
             </AppDataTable>
         </template>
+
+        <AlertDialog v-model:open="pdfConfirmOpen">
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>El PDF solo exporta 1000 registros</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Este reporte tiene {{ summary?.total }} registros. El PDF exportará únicamente los primeros 1000;
+                        usa Excel si necesitas el reporte completo. ¿Deseas continuar con el PDF?
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel @click="pdfConfirmOpen = false">Cancelar</AlertDialogCancel>
+                    <AlertDialogAction @click="confirmPdfExport">Exportar PDF de todos modos</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
     </div>
 </template>
