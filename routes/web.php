@@ -149,6 +149,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::middleware('permission:Editar configuración')->group(function () {
         Route::patch('/configuracion', [SystemSettingController::class, 'update'])->name('configuracion.update');
+        Route::patch('/configuracion/toggle', [SystemSettingController::class, 'toggle'])->name('configuracion.toggle');
     });
 
     // ── Evidencias de Asistencia ────────────────────────────────────────

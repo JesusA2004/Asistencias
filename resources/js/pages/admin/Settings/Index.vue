@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { useForm } from '@inertiajs/vue3';
+import { router, useForm } from '@inertiajs/vue3';
 import { AlertCircle, Check, Loader2, Settings2 } from '@lucide/vue';
-import { computed, onBeforeUnmount, ref } from 'vue';
+import { computed, ref } from 'vue';
 import PageHeader from '@/components/PageHeader.vue';
 import SystemSettingsForm from '@/components/SystemSettingsForm.vue';
 import type { SettingsFormData } from '@/components/SystemSettingsForm.vue';
@@ -50,53 +50,50 @@ const form = useForm<SettingsFormData>({
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 const saveStatus = ref<SaveStatus>('idle');
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
-let resaveNeeded = false;
 
-const persist = () => {
-    if (form.processing) {
-        resaveNeeded = true;
+const flashSaved = () => {
+    saveStatus.value = 'saved';
 
-        return;
-    }
-
-    saveStatus.value = 'saving';
-
-    form.patch('/configuracion', {
-        preserveScroll: true,
-        onSuccess: () => {
-            saveStatus.value = 'saved';
-            // El toast de éxito ya lo dispara el handler global de flash (back()->with('success', ...)).
-
-            if (idleTimer) {
-                clearTimeout(idleTimer);
-            }
-
-            idleTimer = setTimeout(() => {
-                if (saveStatus.value === 'saved') {
-                    saveStatus.value = 'idle';
-                }
-            }, 3000);
-
-            if (resaveNeeded) {
-                resaveNeeded = false;
-                persist();
-            }
-        },
-        onError: () => {
-            saveStatus.value = 'error';
-            notify.error('No se pudo guardar la configuración. Revisa los campos e intenta de nuevo.');
-        },
-    });
-};
-
-onBeforeUnmount(() => {
     if (idleTimer) {
         clearTimeout(idleTimer);
     }
-});
+
+    idleTimer = setTimeout(() => {
+        if (saveStatus.value === 'saved') {
+            saveStatus.value = 'idle';
+        }
+    }, 3000);
+};
+
+// Endpoint dedicado: cada switch guarda solo su propio valor, sin depender del
+// formulario completo de Configuración ni de su estado de "processing".
+const saveToggle = (key: keyof SettingsFormData, value: boolean, previousValue: boolean) => {
+    saveStatus.value = 'saving';
+
+    router.patch(
+        '/configuracion/toggle',
+        { key, value },
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                flashSaved();
+                // El toast de éxito ya lo dispara el handler global de flash (back()->with('success', ...)).
+            },
+            onError: () => {
+                (form as unknown as Record<string, unknown>)[key] = previousValue;
+                saveStatus.value = 'error';
+                notify.error('No se pudo guardar la configuración. Se restauró el valor anterior.');
+            },
+        },
+    );
+};
 
 const onUpdate = (value: SettingsFormData) => {
     const changedKey = (Object.keys(value) as (keyof SettingsFormData)[]).find((key) => value[key] !== form[key]);
+
+    if (!changedKey) {
+        return;
+    }
 
     const turningOnRequiresPhoto = value.supervisor_capture_requires_photo && !form.supervisor_capture_requires_photo;
 
@@ -107,21 +104,32 @@ const onUpdate = (value: SettingsFormData) => {
         );
     }
 
+    const previousValue = form[changedKey];
+
     Object.assign(form, value);
 
-    // Los switches se guardan solos e inmediato. Los campos de texto/número (aviso
-    // legal, días de retención) se quedan para el botón "Guardar configuración" —
-    // autosavearlos mientras el usuario todavía está escribiendo dispararía errores
-    // de validación a medio teclear.
-    if (changedKey && BOOLEAN_KEYS.includes(changedKey)) {
-        persist();
+    // Los switches se guardan solos e inmediato vía /configuracion/toggle. Los campos
+    // de texto/número (aviso legal, días de retención) se quedan para el botón
+    // "Guardar configuración" — autosavearlos mientras el usuario todavía está
+    // escribiendo dispararía errores de validación a medio teclear.
+    if (BOOLEAN_KEYS.includes(changedKey)) {
+        saveToggle(changedKey, Boolean(value[changedKey]), Boolean(previousValue));
     }
 };
 
 // Botón manual: para el texto legal y los días de retención, que no autosavean
 // (evita disparar validación mientras el usuario todavía está escribiendo).
 const submit = () => {
-    persist();
+    saveStatus.value = 'saving';
+
+    form.patch('/configuracion', {
+        preserveScroll: true,
+        onSuccess: () => flashSaved(),
+        onError: () => {
+            saveStatus.value = 'error';
+            notify.error('No se pudo guardar la configuración. Revisa los campos e intenta de nuevo.');
+        },
+    });
 };
 </script>
 

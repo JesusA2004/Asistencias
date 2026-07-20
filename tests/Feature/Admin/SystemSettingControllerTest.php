@@ -84,4 +84,40 @@ class SystemSettingControllerTest extends TestCase
             ->patch('/configuracion', $this->validPayload(['attendance_photo_retention_days' => 0]))
             ->assertSessionHasErrors('attendance_photo_retention_days');
     }
+
+    public function test_admin_can_toggle_a_single_switch(): void
+    {
+        $this->assertSame('0', Setting::where('key', 'supervisor_capture_requires_photo')->value('value'));
+
+        $this->actingAs($this->admin)
+            ->patch('/configuracion/toggle', ['key' => 'supervisor_capture_requires_photo', 'value' => true])
+            ->assertRedirect();
+
+        $this->assertSame('1', Setting::where('key', 'supervisor_capture_requires_photo')->value('value'));
+        $this->assertTrue(setting('supervisor_capture_requires_photo'));
+
+        // El resto de los settings no debe verse afectado por un toggle individual.
+        $this->assertSame('1', Setting::where('key', 'employee_self_attendance_requires_photo')->value('value'));
+    }
+
+    public function test_toggle_rejects_a_key_outside_the_allowed_list(): void
+    {
+        $this->actingAs($this->admin)
+            ->patch('/configuracion/toggle', ['key' => 'attendance_warning_text', 'value' => true])
+            ->assertSessionHasErrors('key');
+    }
+
+    public function test_toggle_rejects_a_non_boolean_value(): void
+    {
+        $this->actingAs($this->admin)
+            ->patch('/configuracion/toggle', ['key' => 'supervisor_capture_requires_photo', 'value' => 'si'])
+            ->assertSessionHasErrors('value');
+    }
+
+    public function test_supervisor_cannot_toggle_settings(): void
+    {
+        $this->actingAs($this->supervisor)
+            ->patch('/configuracion/toggle', ['key' => 'supervisor_capture_requires_photo', 'value' => true])
+            ->assertForbidden();
+    }
 }
