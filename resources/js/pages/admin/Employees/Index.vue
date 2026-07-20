@@ -26,6 +26,9 @@ const props = defineProps<{
     clients: Client[];
     servicePoints: ServicePoint[];
     shifts: Shift[];
+    supervisors: { id: number; name: string }[];
+    countsByClient: { client_id: number; client_name: string; total: number }[];
+    countsByServicePoint: { service_point_id: number; service_point_name: string; total: number }[];
     filters: Record<string, string | undefined>;
 }>();
 
@@ -182,24 +185,46 @@ const shiftIdModel = computed({
     },
 });
 
-const filterClientId = computed({
-    get: () => props.filters.client_id ?? null,
+const makeFilter = (key: string) => computed({
+    get: () => props.filters[key] ?? null,
     set: (v: string | number | null) => {
-        router.get('/colaboradores', { ...props.filters, client_id: v == null ? undefined : String(v) }, { preserveState: true, replace: true });
+        router.get('/colaboradores', { ...props.filters, [key]: v == null ? undefined : String(v) }, { preserveState: true, replace: true });
     },
 });
-const filterStatus = computed({
-    get: () => props.filters.status ?? null,
-    set: (v: string | number | null) => {
-        router.get('/colaboradores', { ...props.filters, status: v == null ? undefined : String(v) }, { preserveState: true, replace: true });
-    },
-});
+
+const filterClientId = makeFilter('client_id');
+const filterServicePointId = makeFilter('service_point_id');
+const filterShiftId = makeFilter('shift_id');
+const filterStatus = makeFilter('status');
+const filterSupervisorId = makeFilter('supervisor_id');
+const filterHasUser = makeFilter('has_user');
+const filterHasRecentAttendance = makeFilter('has_recent_attendance');
+
 const statusFilterOptions = [
     { value: 'activo', label: 'Activo' },
     { value: 'inactivo', label: 'Inactivo' },
     { value: 'baja', label: 'Baja' },
 ];
-const hasActiveFilters = computed(() => !!(props.filters.search || props.filters.client_id || props.filters.status));
+const linkedUserOptions = [
+    { value: 'con', label: 'Con usuario vinculado' },
+    { value: 'sin', label: 'Sin usuario vinculado' },
+];
+const recentAttendanceOptions = [
+    { value: 'con', label: 'Con asistencias recientes' },
+    { value: 'sin', label: 'Sin asistencias recientes' },
+];
+const servicePointFilterOptions = computed(() =>
+    props.servicePoints
+        .filter((sp) => !filterClientId.value || String(sp.client_id) === String(filterClientId.value))
+        .map((sp) => ({ value: sp.id, label: sp.name })),
+);
+const supervisorFilterOptions = computed(() => props.supervisors.map((s) => ({ value: s.id, label: s.name })));
+
+const hasActiveFilters = computed(() => !!(
+    props.filters.search || props.filters.client_id || props.filters.service_point_id ||
+    props.filters.shift_id || props.filters.status || props.filters.supervisor_id ||
+    props.filters.has_user || props.filters.has_recent_attendance
+));
 const clearFilters = () => router.get('/colaboradores', {}, { preserveState: true, replace: true });
 
 const columns: ColumnDef<Employee>[] = [
@@ -225,6 +250,30 @@ const columns: ColumnDef<Employee>[] = [
             </template>
         </PageHeader>
 
+        <!-- Conteos por empresa/punto -->
+        <div v-if="countsByClient.length" class="mb-2 flex flex-wrap gap-2">
+            <button
+                v-for="c in countsByClient"
+                :key="c.client_id"
+                type="button"
+                class="rounded-full border bg-muted/30 px-3 py-1 text-xs font-medium transition-colors hover:bg-muted"
+                @click="filterClientId = String(c.client_id)"
+            >
+                {{ c.client_name }} <span class="text-muted-foreground">({{ c.total }})</span>
+            </button>
+        </div>
+        <div v-if="countsByServicePoint.length" class="mb-4 flex flex-wrap gap-2">
+            <button
+                v-for="c in countsByServicePoint"
+                :key="c.service_point_id"
+                type="button"
+                class="rounded-full border border-dashed bg-muted/10 px-3 py-1 text-xs font-normal text-muted-foreground transition-colors hover:bg-muted"
+                @click="filterServicePointId = String(c.service_point_id)"
+            >
+                {{ c.service_point_name }} <span>({{ c.total }})</span>
+            </button>
+        </div>
+
         <AppDataTable
             :columns="columns"
             :data="employees.data"
@@ -237,8 +286,13 @@ const columns: ColumnDef<Employee>[] = [
             @page-change="onPage"
         >
             <template #filters>
-                <SearchableSelect v-model="filterClientId" :options="clientOptions" placeholder="Empresa..." class="w-48" />
-                <SearchableSelect v-model="filterStatus" :options="statusFilterOptions" placeholder="Estado..." class="w-40" />
+                <SearchableSelect v-model="filterClientId" :options="clientOptions" placeholder="Empresa..." class="w-44" />
+                <SearchableSelect v-model="filterServicePointId" :options="servicePointFilterOptions" placeholder="Punto de servicio..." class="w-48" />
+                <SearchableSelect v-model="filterShiftId" :options="shiftOptions" placeholder="Turno..." class="w-40" />
+                <SearchableSelect v-model="filterSupervisorId" :options="supervisorFilterOptions" placeholder="Supervisor..." class="w-44" />
+                <SearchableSelect v-model="filterStatus" :options="statusFilterOptions" placeholder="Estado..." class="w-36" />
+                <SearchableSelect v-model="filterHasUser" :options="linkedUserOptions" placeholder="Usuario vinculado..." class="w-56" />
+                <SearchableSelect v-model="filterHasRecentAttendance" :options="recentAttendanceOptions" placeholder="Asistencias recientes..." class="w-56" />
                 <Button v-if="hasActiveFilters" variant="ghost" size="sm" @click="clearFilters">
                     <X class="h-3.5 w-3.5 mr-1" /> Limpiar filtros
                 </Button>

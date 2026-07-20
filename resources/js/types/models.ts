@@ -138,6 +138,44 @@ export interface Permission {
     guard_name: string;
 }
 
+export type AttendancePhotoCaptureType = 'entrada' | 'salida' | 'incidencia' | 'manual';
+export type AttendancePhotoCaptureOrigin = 'colaborador' | 'supervisor' | 'admin' | 'rh';
+
+export interface AttendancePhoto {
+    id: number;
+    attendance_id: number;
+    attendance_event_id: number | null;
+    employee_id: number;
+    captured_by_user_id: number;
+    client_id: number;
+    service_point_id: number;
+    capture_type: AttendancePhotoCaptureType;
+    capture_origin: AttendancePhotoCaptureOrigin;
+    captured_at: string;
+    server_time: string;
+    device_time: string | null;
+    latitude: string | null;
+    longitude: string | null;
+    created_at: string;
+    updated_at: string;
+    employee?: Employee;
+    client?: Client;
+    service_point?: ServicePoint;
+    captured_by?: AppUser;
+    attendance?: Attendance;
+}
+
+export type SettingType = 'boolean' | 'integer' | 'string' | 'text';
+
+export interface Setting {
+    id: number;
+    key: string;
+    value: string | null;
+    type: SettingType;
+    group: string;
+    description: string | null;
+}
+
 export interface PaginatedData<T> {
     data: T[];
     current_page: number;

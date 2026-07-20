@@ -65,4 +65,9 @@ class Attendance extends Model
     {
         return $this->hasMany(AttendanceAudit::class);
     }
+
+    public function photos(): HasMany
+    {
+        return $this->hasMany(AttendancePhoto::class);
+    }
 }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { router } from '@inertiajs/vue3';
-import { AlertTriangle, ClipboardList, Users } from '@lucide/vue';
+import { AlertTriangle, ClipboardList, ShieldCheck, Users } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import AttendanceActionSelector from '@/components/AttendanceActionSelector.vue';
@@ -17,6 +17,7 @@ import AttendanceManualPanel from '@/components/AttendanceManualPanel.vue';
 import type {ManualRecord} from '@/components/AttendanceManualPanel.vue';
 import AttendanceProgressSummary from '@/components/AttendanceProgressSummary.vue';
 import AttendanceSummaryBar from '@/components/AttendanceSummaryBar.vue';
+import AttendanceWarningDialog from '@/components/AttendanceWarningDialog.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import { useInertiaLoading } from '@/composables/useInertiaLoading';
 import { deriveCaptureState, nowTime, suggestEntryStatus } from '@/lib/attendance';
@@ -32,6 +33,13 @@ const props = defineProps<{
     filters: { client_id?: string; service_point_id?: string; date?: string };
     hasAssignments: boolean;
     canUseManualCapture: boolean;
+    settings: {
+        requires_photo: boolean;
+        photo_per_employee: boolean;
+        warning_text: string;
+        warning_version: number;
+        needs_warning_acceptance: boolean;
+    };
 }>();
 
 const { isLoading } = useInertiaLoading();
@@ -51,6 +59,14 @@ const incidentStatus = ref<AttendanceStatus | null>(null);
 const incidentNotes = ref('');
 const manualReason = ref('');
 const saving = ref(false);
+const photos = ref<Record<number, File | null>>({});
+const warningAccepted = ref(false);
+
+const photosRequired = computed(() => props.settings.requires_photo);
+
+const updatePhoto = (employeeId: number, file: File | null) => {
+    photos.value = { ...photos.value, [employeeId]: file };
+};
 
 const filteredServicePoints = computed(() =>
     props.servicePoints.filter((sp) => !selectedClient.value || String(sp.client_id) === String(selectedClient.value)),
@@ -155,6 +171,7 @@ watch(action, () => {
     incidentStatus.value = null;
     incidentNotes.value = '';
     manualReason.value = '';
+    photos.value = {};
 });
 
 watch(selectedEmployeeIds, (ids) => {
@@ -231,18 +248,36 @@ const selectedManualEmployees = computed(() => selectedEmployeeIds.value.map((id
     };
 }));
 
-const selectedIncidentNames = computed(() => selectedEmployeeIds.value.map((id) => {
+const selectedIncidentEmployees = computed(() => selectedEmployeeIds.value.map((id) => {
     const e = employeesById.value.get(id)!;
 
-    return `${e.name} ${e.last_name}`;
+    return { id: e.id, name: `${e.name} ${e.last_name}` };
 }));
 
 const manualAnyExisting = computed(() => selectedEmployeeIds.value.some((id) => !!props.existingAttendances[id]));
 
 const incidentRequiresNotes = computed(() => incidentStatus.value === 'permiso' || incidentStatus.value === 'incapacidad');
 
+const photosCapturedCount = computed(() => selectedEmployeeIds.value.filter((id) => !!photos.value[id]).length);
+
+const missingRequiredPhotos = computed(() => {
+    if (!photosRequired.value) {
+        return false;
+    }
+
+    if (props.settings.photo_per_employee) {
+        return photosCapturedCount.value < selectedEmployeeIds.value.length;
+    }
+
+    return photosCapturedCount.value < 1;
+});
+
 const canSubmit = computed(() => {
     if (!selectedEmployeeIds.value.length) {
+        return false;
+    }
+
+    if (missingRequiredPhotos.value) {
         return false;
     }
 
@@ -264,6 +299,22 @@ const canSubmit = computed(() => {
 
     return true;
 });
+
+const needsWarning = computed(() => photosRequired.value && props.settings.needs_warning_acceptance && !warningAccepted.value);
+
+const acceptWarning = () => {
+    router.post(
+        '/asistencias/aceptar-aviso',
+        { context: 'supervisor' },
+        {
+            preserveScroll: true,
+            preserveState: true,
+            onSuccess: () => {
+                warningAccepted.value = true;
+            },
+        },
+    );
+};
 
 const summaryLabel = computed(() => ({
     entrada: 'listos para registrar entrada',
@@ -341,22 +392,29 @@ const submit = () => {
     };
 
     const onFinish = () => {
- saving.value = false; 
+ saving.value = false;
 };
     const onSuccess = (page: unknown) => {
         handleFlash(page);
         selectedEmployeeIds.value = [];
+        photos.value = {};
     };
+
+    const photosPayload = photosRequired.value
+        ? Object.fromEntries(selectedEmployeeIds.value.filter((id) => photos.value[id]).map((id) => [id, photos.value[id]]))
+        : undefined;
 
     if (action.value === 'entrada') {
         router.post('/asistencias/capturar/entrada', {
             ...base,
             entries: selectedEmployeeIds.value.map((id) => ({ employee_id: id, ...entryRecords.value[id] })),
+            photos: photosPayload,
         }, { preserveScroll: true, onSuccess, onFinish });
     } else if (action.value === 'salida') {
         router.post('/asistencias/capturar/salida', {
             ...base,
             exits: selectedEmployeeIds.value.map((id) => ({ employee_id: id, ...exitRecords.value[id] })),
+            photos: photosPayload,
         }, { preserveScroll: true, onSuccess, onFinish });
     } else if (action.value === 'incidencia') {
         router.post('/asistencias/capturar/incidencia', {
@@ -364,10 +422,11 @@ const submit = () => {
             status: incidentStatus.value,
             notes: incidentNotes.value || undefined,
             employee_ids: selectedEmployeeIds.value,
+            photos: photosPayload,
         }, {
             preserveScroll: true,
             onSuccess: (page) => {
- onSuccess(page); incidentStatus.value = null; incidentNotes.value = ''; 
+ onSuccess(page); incidentStatus.value = null; incidentNotes.value = '';
 },
             onFinish,
         });
@@ -376,10 +435,11 @@ const submit = () => {
             ...base,
             reason: manualReason.value || undefined,
             records: selectedEmployeeIds.value.map((id) => ({ employee_id: id, ...manualRecords.value[id] })),
+            photos: photosPayload,
         }, {
             preserveScroll: true,
             onSuccess: (page) => {
- onSuccess(page); manualReason.value = ''; 
+ onSuccess(page); manualReason.value = '';
 },
             onFinish,
         });
@@ -475,21 +535,30 @@ const noClientsMessage = computed(() =>
                                 v-if="action === 'entrada'"
                                 :employees="selectedEntryEmployees"
                                 :records="entryRecords"
+                                :photos-required="photosRequired"
+                                :photos="photos"
                                 @update="updateEntryRecord"
+                                @photo-update="updatePhoto"
                             />
                             <AttendanceExitPanel
                                 v-else-if="action === 'salida'"
                                 :employees="selectedExitEmployees"
                                 :records="exitRecords"
+                                :photos-required="photosRequired"
+                                :photos="photos"
                                 @update="updateExitRecord"
+                                @photo-update="updatePhoto"
                             />
                             <AttendanceIncidentPanel
                                 v-else-if="action === 'incidencia'"
-                                :employee-names="selectedIncidentNames"
+                                :employees="selectedIncidentEmployees"
                                 :status="incidentStatus"
                                 :notes="incidentNotes"
+                                :photos-required="photosRequired"
+                                :photos="photos"
                                 @update:status="incidentStatus = $event"
                                 @update:notes="incidentNotes = $event"
+                                @photo-update="updatePhoto"
                             />
                             <AttendanceManualPanel
                                 v-else-if="action === 'manual'"
@@ -497,8 +566,11 @@ const noClientsMessage = computed(() =>
                                 :records="manualRecords"
                                 :reason="manualReason"
                                 :any-existing="manualAnyExisting"
+                                :photos-required="photosRequired"
+                                :photos="photos"
                                 @update="updateManualRecord"
                                 @update:reason="manualReason = $event"
+                                @photo-update="updatePhoto"
                             />
 
                             <AttendanceSummaryBar
@@ -507,12 +579,26 @@ const noClientsMessage = computed(() =>
                                 :submit-label="submitLabel"
                                 :saving="saving"
                                 :disabled="!canSubmit"
+                                :photos-captured="photosRequired ? photosCapturedCount : undefined"
+                                :photos-total="photosRequired ? selectedEmployeeIds.length : undefined"
                                 @save="submit"
                             />
+
+                            <p v-if="photosRequired" class="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
+                                <ShieldCheck class="h-3.5 w-3.5" />
+                                Las evidencias fotográficas solo son visibles para personal autorizado.
+                            </p>
                         </template>
                     </template>
                 </template>
             </template>
         </template>
+
+        <AttendanceWarningDialog
+            :open="needsWarning"
+            :warning-text="settings.warning_text"
+            @accept="acceptWarning"
+            @cancel="action = null"
+        />
     </div>
 </template>

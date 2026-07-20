@@ -6,10 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Models\Attendance;
 use App\Models\AttendanceAudit;
 use App\Models\AttendanceEvent;
+use App\Models\AttendanceTermsAcceptance;
 use App\Models\Client;
 use App\Models\Employee;
 use App\Models\ServicePoint;
 use App\Models\User;
+use App\Services\AttendancePhotoService;
+use App\Support\SupervisorScope;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,6 +22,8 @@ use Inertia\Response;
 
 class AttendanceCaptureController extends Controller
 {
+    public function __construct(private readonly AttendancePhotoService $photoService) {}
+
     /**
      * Administradores y RH no dependen de una fila en supervisor_assignments: operan
      * sobre todas las empresas/puntos activos. Un supervisor normal sigue restringido
@@ -26,7 +31,7 @@ class AttendanceCaptureController extends Controller
      */
     private function hasBroadCaptureAccess(User $user): bool
     {
-        return $user->hasRole('administrador') || $user->hasRole('rh');
+        return SupervisorScope::hasBroadAccess($user);
     }
 
     public function index(Request $request): Response
@@ -89,26 +94,34 @@ class AttendanceCaptureController extends Controller
             'filters' => $request->only(['client_id', 'service_point_id', 'date']),
             'hasAssignments' => $hasAssignments,
             'canUseManualCapture' => $user->can('manualCapture', Attendance::class),
+            'settings' => [
+                'requires_photo' => setting('supervisor_capture_requires_photo', false),
+                'photo_per_employee' => setting('supervisor_capture_photo_per_employee', true),
+                'warning_text' => setting('attendance_warning_text', ''),
+                'warning_version' => (int) setting('attendance_warning_version', 1),
+                'needs_warning_acceptance' => setting('supervisor_capture_requires_photo', false) && ! AttendanceTermsAcceptance::where('user_id', $user->id)
+                    ->where('context', 'supervisor')
+                    ->where('warning_version', (int) setting('attendance_warning_version', 1))
+                    ->whereDate('accepted_at', Carbon::today())
+                    ->exists(),
+            ],
         ]);
     }
 
     /** Null si el usuario tiene acceso a la empresa/punto solicitados; el mensaje de error si no. */
     private function checkAssignmentAccess(Request $request, User $user): ?string
     {
-        if ($this->hasBroadCaptureAccess($user)) {
+        if (SupervisorScope::hasBroadAccess($user)) {
             return null;
         }
 
-        $assignments = $user->supervisorAssignments()->where('client_id', $request->client_id)->get();
+        $assignments = SupervisorScope::assignmentsForClient($user, (int) $request->client_id);
 
         if ($assignments->isEmpty()) {
             return 'No tienes asignación para esta empresa.';
         }
 
-        $hasClientWideAccess = $assignments->contains(fn ($a) => $a->service_point_id === null);
-        $hasSpecificPointAccess = $assignments->contains(fn ($a) => (int) $a->service_point_id === (int) $request->service_point_id);
-
-        if (! $hasClientWideAccess && ! $hasSpecificPointAccess) {
+        if (! SupervisorScope::hasAccessToServicePoint($user, (int) $request->client_id, (int) $request->service_point_id)) {
             return 'No tienes asignación para este punto de servicio.';
         }
 
@@ -136,6 +149,48 @@ class AttendanceCaptureController extends Controller
         return $validCount === $ids->count() ? null : 'Uno o más colaboradores no pertenecen a la empresa o punto de servicio seleccionados.';
     }
 
+    /**
+     * Si "supervisor_capture_requires_photo" está activo, exige evidencia fotográfica.
+     * Con "supervisor_capture_photo_per_employee" activo (el caso normal) exige una foto
+     * por cada colaborador de la lista; si está desactivado, basta con que exista al
+     * menos una foto en el lote (el esquema liga cada foto a un solo colaborador, así
+     * que "una foto general" no aplica: se interpreta como "al menos una evidencia").
+     */
+    private function checkPhotosPresent(Request $request, array $employeeIds): ?string
+    {
+        if (! setting('supervisor_capture_requires_photo', false)) {
+            return null;
+        }
+
+        $photos = $request->file('photos', []);
+        $perEmployee = setting('supervisor_capture_photo_per_employee', true);
+
+        if ($perEmployee) {
+            foreach ($employeeIds as $employeeId) {
+                if (empty($photos[$employeeId])) {
+                    return 'Falta la fotografía de uno o más colaboradores. La captura con evidencia fotográfica es obligatoria.';
+                }
+            }
+
+            return null;
+        }
+
+        return empty(array_filter($photos)) ? 'Debes capturar al menos una fotografía de evidencia.' : null;
+    }
+
+    private function captureOriginFor(User $user): string
+    {
+        if ($user->hasRole('administrador')) {
+            return 'admin';
+        }
+
+        if ($user->hasRole('rh')) {
+            return 'rh';
+        }
+
+        return 'supervisor';
+    }
+
     public function storeEntry(Request $request): RedirectResponse
     {
         $this->authorize('create', Attendance::class);
@@ -149,6 +204,8 @@ class AttendanceCaptureController extends Controller
             'entries.*.entry_time' => 'required|date_format:H:i',
             'entries.*.status' => 'required|in:presente,retardo',
             'entries.*.notes' => 'nullable|string|max:300',
+            'photos' => 'nullable|array',
+            'photos.*' => 'nullable|image|mimes:jpeg,jpg,png|max:5120',
         ]);
 
         $user = auth()->user();
@@ -167,10 +224,15 @@ class AttendanceCaptureController extends Controller
             return back()->with('error', $error);
         }
 
+        if ($error = $this->checkPhotosPresent($request, $employeeIds)) {
+            return back()->with('error', $error);
+        }
+
         $created = 0;
         $skipped = 0;
+        $origin = $this->captureOriginFor($user);
 
-        DB::transaction(function () use ($request, $user, &$created, &$skipped) {
+        DB::transaction(function () use ($request, $user, $origin, &$created, &$skipped) {
             foreach ($request->entries as $entry) {
                 $existing = Attendance::where('employee_id', $entry['employee_id'])
                     ->whereDate('attendance_date', $request->attendance_date)
@@ -224,10 +286,10 @@ class AttendanceCaptureController extends Controller
                     'created_at' => now(),
                 ]);
 
-                AttendanceEvent::create([
+                $event = AttendanceEvent::create([
                     'attendance_id' => $attendance->id,
                     'event_type' => 'entrada',
-                    'event_time' => Carbon::parse($request->attendance_date . ' ' . $entry['entry_time']),
+                    'event_time' => Carbon::parse($request->attendance_date.' '.$entry['entry_time']),
                     'value' => $entry['entry_time'],
                     'created_by' => $user->id,
                     'ip_address' => $request->ip(),
@@ -235,6 +297,11 @@ class AttendanceCaptureController extends Controller
                     'notes' => null,
                     'created_at' => now(),
                 ]);
+
+                if ($photo = $request->file("photos.{$entry['employee_id']}")) {
+                    $employee = Employee::find($entry['employee_id']);
+                    $this->photoService->store($photo, $attendance, $event, $employee, $user, 'entrada', $origin, $request);
+                }
             }
         });
 
@@ -258,6 +325,8 @@ class AttendanceCaptureController extends Controller
             'exits.*.employee_id' => 'required|exists:employees,id',
             'exits.*.exit_time' => 'required|date_format:H:i',
             'exits.*.notes' => 'nullable|string|max:300',
+            'photos' => 'nullable|array',
+            'photos.*' => 'nullable|image|mimes:jpeg,jpg,png|max:5120',
         ]);
 
         $user = auth()->user();
@@ -276,11 +345,16 @@ class AttendanceCaptureController extends Controller
             return back()->with('error', $error);
         }
 
+        if ($error = $this->checkPhotosPresent($request, $employeeIds)) {
+            return back()->with('error', $error);
+        }
+
         $updated = 0;
         $skippedNoEntry = 0;
         $skippedHasExit = 0;
+        $origin = $this->captureOriginFor($user);
 
-        DB::transaction(function () use ($request, $user, &$updated, &$skippedNoEntry, &$skippedHasExit) {
+        DB::transaction(function () use ($request, $user, $origin, &$updated, &$skippedNoEntry, &$skippedHasExit) {
             foreach ($request->exits as $exit) {
                 $attendance = Attendance::where('employee_id', $exit['employee_id'])
                     ->whereDate('attendance_date', $request->attendance_date)
@@ -319,10 +393,10 @@ class AttendanceCaptureController extends Controller
                     'created_at' => now(),
                 ]);
 
-                AttendanceEvent::create([
+                $event = AttendanceEvent::create([
                     'attendance_id' => $attendance->id,
                     'event_type' => 'salida',
-                    'event_time' => Carbon::parse($request->attendance_date . ' ' . $exit['exit_time']),
+                    'event_time' => Carbon::parse($request->attendance_date.' '.$exit['exit_time']),
                     'value' => $exit['exit_time'],
                     'created_by' => $user->id,
                     'ip_address' => $request->ip(),
@@ -330,6 +404,11 @@ class AttendanceCaptureController extends Controller
                     'notes' => null,
                     'created_at' => now(),
                 ]);
+
+                if ($photo = $request->file("photos.{$exit['employee_id']}")) {
+                    $employee = Employee::find($exit['employee_id']);
+                    $this->photoService->store($photo, $attendance, $event, $employee, $user, 'salida', $origin, $request);
+                }
             }
         });
 
@@ -356,6 +435,8 @@ class AttendanceCaptureController extends Controller
             'notes' => 'nullable|string|max:300',
             'employee_ids' => 'required|array|min:1',
             'employee_ids.*' => 'required|exists:employees,id',
+            'photos' => 'nullable|array',
+            'photos.*' => 'nullable|image|mimes:jpeg,jpg,png|max:5120',
         ]);
 
         // El motivo es obligatorio (con contenido real) para permiso/incapacidad; el resto lo
@@ -378,10 +459,15 @@ class AttendanceCaptureController extends Controller
             return back()->with('error', $error);
         }
 
+        if ($error = $this->checkPhotosPresent($request, $request->employee_ids)) {
+            return back()->with('error', $error);
+        }
+
         $created = 0;
         $skipped = 0;
+        $origin = $this->captureOriginFor($user);
 
-        DB::transaction(function () use ($request, $user, &$created, &$skipped) {
+        DB::transaction(function () use ($request, $user, $origin, &$created, &$skipped) {
             foreach ($request->employee_ids as $employeeId) {
                 $existing = Attendance::where('employee_id', $employeeId)
                     ->whereDate('attendance_date', $request->attendance_date)
@@ -420,7 +506,7 @@ class AttendanceCaptureController extends Controller
                     'created_at' => now(),
                 ]);
 
-                AttendanceEvent::create([
+                $event = AttendanceEvent::create([
                     'attendance_id' => $attendance->id,
                     'event_type' => 'incidencia',
                     'event_time' => now(),
@@ -431,6 +517,10 @@ class AttendanceCaptureController extends Controller
                     'notes' => $request->notes,
                     'created_at' => now(),
                 ]);
+
+                if ($photo = $request->file("photos.{$employeeId}")) {
+                    $this->photoService->store($photo, $attendance, $event, $employee, $user, 'incidencia', $origin, $request);
+                }
             }
         });
 
@@ -457,6 +547,8 @@ class AttendanceCaptureController extends Controller
             'records.*.exit_time' => 'nullable|date_format:H:i',
             'records.*.notes' => 'nullable|string|max:300',
             'reason' => 'nullable|string|max:500',
+            'photos' => 'nullable|array',
+            'photos.*' => 'nullable|image|mimes:jpeg,jpg,png|max:5120',
         ]);
 
         $user = auth()->user();
@@ -484,10 +576,15 @@ class AttendanceCaptureController extends Controller
             return back()->with('error', 'Debes indicar un motivo (mínimo 10 caracteres): uno o más colaboradores ya tienen asistencia registrada ese día.');
         }
 
+        if ($error = $this->checkPhotosPresent($request, $employeeIds)) {
+            return back()->with('error', $error);
+        }
+
         $created = 0;
         $updated = 0;
+        $origin = $this->captureOriginFor($user);
 
-        DB::transaction(function () use ($request, $user, &$created, &$updated) {
+        DB::transaction(function () use ($request, $user, $origin, &$created, &$updated) {
             foreach ($request->records as $record) {
                 $existing = Attendance::where('employee_id', $record['employee_id'])
                     ->whereDate('attendance_date', $request->attendance_date)
@@ -542,6 +639,12 @@ class AttendanceCaptureController extends Controller
                         'changed_by' => $user->id,
                         'created_at' => now(),
                     ]);
+                }
+
+                if ($photo = $request->file("photos.{$record['employee_id']}")) {
+                    $attendanceRecord = $existing ?? $attendance;
+                    $employeeForPhoto = Employee::find($record['employee_id']);
+                    $this->photoService->store($photo, $attendanceRecord, null, $employeeForPhoto, $user, 'manual', $origin, $request);
                 }
             }
         });

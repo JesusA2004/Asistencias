@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AttendancePhotoField from '@/components/AttendancePhotoField.vue';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { statusVisual } from '@/lib/status';
@@ -7,15 +8,29 @@ import type { AttendanceStatus } from '@/types/models';
 
 const INCIDENT_STATUSES: AttendanceStatus[] = ['falta', 'descanso', 'permiso', 'incapacidad', 'retardo'];
 
-defineProps<{
-    employeeNames: string[];
-    status: AttendanceStatus | null;
-    notes: string;
-}>();
+export interface IncidentEmployee {
+    id: number;
+    name: string;
+}
+
+withDefaults(
+    defineProps<{
+        employees: IncidentEmployee[];
+        status: AttendanceStatus | null;
+        notes: string;
+        photosRequired?: boolean;
+        photos?: Record<number, File | null>;
+    }>(),
+    {
+        photosRequired: false,
+        photos: () => ({}),
+    },
+);
 
 const emit = defineEmits<{
     'update:status': [value: AttendanceStatus];
     'update:notes': [value: string];
+    'photo-update': [employeeId: number, file: File | null];
 }>();
 
 const requiresNotes = (status: AttendanceStatus | null) => status === 'permiso' || status === 'incapacidad';
@@ -24,9 +39,9 @@ const requiresNotes = (status: AttendanceStatus | null) => status === 'permiso' 
 <template>
     <div class="space-y-4 rounded-xl border bg-card p-5 shadow-sm">
         <div>
-            <p class="mb-2 text-sm font-medium">Aplicará a {{ employeeNames.length }} colaborador(es):</p>
+            <p class="mb-2 text-sm font-medium">Aplicará a {{ employees.length }} colaborador(es):</p>
             <div class="flex flex-wrap gap-1.5">
-                <Badge v-for="n in employeeNames" :key="n" variant="secondary" class="text-xs font-normal">{{ n }}</Badge>
+                <Badge v-for="e in employees" :key="e.id" variant="secondary" class="text-xs font-normal">{{ e.name }}</Badge>
             </div>
         </div>
         <div>
@@ -59,6 +74,19 @@ const requiresNotes = (status: AttendanceStatus | null) => status === 'permiso' 
             <p v-if="requiresNotes(status)" class="mt-1 text-xs text-muted-foreground">
                 Obligatorio para {{ status === 'permiso' ? 'permiso' : 'incapacidad' }} (mínimo 5 caracteres).
             </p>
+        </div>
+        <div v-if="photosRequired">
+            <p class="mb-2 text-sm font-medium">Evidencia fotográfica por colaborador</p>
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <AttendancePhotoField
+                    v-for="e in employees"
+                    :key="e.id"
+                    :model-value="photos[e.id] ?? null"
+                    :required="true"
+                    :employee-name="e.name"
+                    @update:model-value="emit('photo-update', e.id, $event)"
+                />
+            </div>
         </div>
     </div>
 </template>

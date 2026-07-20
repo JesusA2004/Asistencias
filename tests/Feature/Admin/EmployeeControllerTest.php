@@ -2,10 +2,12 @@
 
 namespace Tests\Feature\Admin;
 
+use App\Models\Attendance;
 use App\Models\Client;
 use App\Models\Employee;
 use App\Models\ServicePoint;
 use App\Models\Shift;
+use App\Models\SupervisorAssignment;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -151,5 +153,98 @@ class EmployeeControllerTest extends TestCase
             ->assertRedirect();
 
         $this->assertSoftDeleted('employees', ['id' => $employee->id]);
+    }
+
+    public function test_filter_by_has_user_narrows_results(): void
+    {
+        $withUser = User::factory()->create();
+        Employee::create([
+            'employee_number' => 'EMP-401', 'name' => 'Con', 'last_name' => 'Usuario', 'status' => 'activo', 'user_id' => $withUser->id,
+        ]);
+        Employee::create([
+            'employee_number' => 'EMP-402', 'name' => 'Sin', 'last_name' => 'Usuario', 'status' => 'activo',
+        ]);
+
+        $this->actingAs($this->admin)
+            ->get('/colaboradores?has_user=con')
+            ->assertInertia(fn (Assert $page) => $page->has('employees.data', 1)
+                ->where('employees.data.0.employee_number', 'EMP-401'));
+
+        $this->actingAs($this->admin)
+            ->get('/colaboradores?has_user=sin')
+            ->assertInertia(fn (Assert $page) => $page->has('employees.data', 1)
+                ->where('employees.data.0.employee_number', 'EMP-402'));
+    }
+
+    public function test_filter_by_recent_attendance_narrows_results(): void
+    {
+        $withRecent = Employee::create([
+            'employee_number' => 'EMP-501', 'name' => 'Reciente', 'last_name' => 'Asistencia', 'status' => 'activo',
+            'client_id' => $this->client->id, 'service_point_id' => $this->servicePoint->id,
+        ]);
+        $withoutRecent = Employee::create([
+            'employee_number' => 'EMP-502', 'name' => 'Sin', 'last_name' => 'Reciente', 'status' => 'activo',
+        ]);
+
+        Attendance::create([
+            'employee_id' => $withRecent->id, 'client_id' => $this->client->id, 'service_point_id' => $this->servicePoint->id,
+            'supervisor_id' => $this->admin->id, 'attendance_date' => now()->format('Y-m-d'),
+            'status' => 'presente', 'created_by' => $this->admin->id,
+        ]);
+
+        $this->actingAs($this->admin)
+            ->get('/colaboradores?has_recent_attendance=con')
+            ->assertInertia(fn (Assert $page) => $page->has('employees.data', 1)
+                ->where('employees.data.0.employee_number', 'EMP-501'));
+
+        $this->actingAs($this->admin)
+            ->get('/colaboradores?has_recent_attendance=sin')
+            ->assertInertia(fn (Assert $page) => $page->has('employees.data', 1)
+                ->where('employees.data.0.employee_number', 'EMP-502'));
+    }
+
+    public function test_filter_by_supervisor_narrows_results_to_assigned_scope(): void
+    {
+        $supervisor = User::factory()->create();
+        $supervisor->assignRole('supervisor');
+
+        $otherClient = Client::create(['name' => 'Otra Empresa', 'status' => 'activo']);
+        $otherSp = ServicePoint::create(['client_id' => $otherClient->id, 'name' => 'Otro Punto', 'status' => 'activo']);
+
+        SupervisorAssignment::create([
+            'supervisor_user_id' => $supervisor->id,
+            'client_id' => $this->client->id,
+            'service_point_id' => $this->servicePoint->id,
+        ]);
+
+        Employee::create([
+            'employee_number' => 'EMP-601', 'name' => 'Asignado', 'last_name' => 'A', 'status' => 'activo',
+            'client_id' => $this->client->id, 'service_point_id' => $this->servicePoint->id,
+        ]);
+        Employee::create([
+            'employee_number' => 'EMP-602', 'name' => 'No', 'last_name' => 'Asignado', 'status' => 'activo',
+            'client_id' => $otherClient->id, 'service_point_id' => $otherSp->id,
+        ]);
+
+        $this->actingAs($this->admin)
+            ->get("/colaboradores?supervisor_id={$supervisor->id}")
+            ->assertInertia(fn (Assert $page) => $page->has('employees.data', 1)
+                ->where('employees.data.0.employee_number', 'EMP-601'));
+    }
+
+    public function test_counts_by_client_and_service_point_are_returned(): void
+    {
+        Employee::create([
+            'employee_number' => 'EMP-701', 'name' => 'Uno', 'last_name' => 'A', 'status' => 'activo',
+            'client_id' => $this->client->id, 'service_point_id' => $this->servicePoint->id,
+        ]);
+
+        $this->actingAs($this->admin)
+            ->get('/colaboradores')
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('countsByClient', 1)
+                ->where('countsByClient.0.total', 1)
+                ->has('countsByServicePoint', 1)
+                ->where('countsByServicePoint.0.total', 1));
     }
 }

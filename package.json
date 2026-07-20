@@ -37,7 +37,7 @@
         "@inertiajs/vite": "^3.0.0",
         "@inertiajs/vue3": "^3.0.0",
         "@laravel/passkeys": "^0.2.0",
-        "@lucide/vue": "^1.23.0",
+        "@lucide/vue": "^1.25.0",
         "@tanstack/vue-table": "^8.21.3",
         "@vueuse/core": "^12.8.2",
         "apexcharts": "^5.16.0",

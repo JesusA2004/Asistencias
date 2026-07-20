@@ -62,4 +62,14 @@ class User extends Authenticatable implements PasskeyUser
     {
         return $this->hasMany(Attendance::class, 'supervisor_id');
     }
+
+    public function capturedAttendancePhotos(): HasMany
+    {
+        return $this->hasMany(AttendancePhoto::class, 'captured_by_user_id');
+    }
+
+    public function attendanceTermsAcceptances(): HasMany
+    {
+        return $this->hasMany(AttendanceTermsAcceptance::class);
+    }
 }

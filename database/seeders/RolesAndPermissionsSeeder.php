@@ -38,6 +38,11 @@ class RolesAndPermissionsSeeder extends Seeder
             'Ver roles y permisos', 'Crear roles y permisos', 'Editar roles y permisos', 'Eliminar roles y permisos',
             // Asignaciones
             'Ver asignaciones', 'Crear asignaciones', 'Eliminar asignaciones',
+            // Configuración
+            'Ver configuración', 'Editar configuración',
+            // Evidencias de asistencia
+            'Registrar mi asistencia', 'Ver evidencias de asistencia', 'Revisar evidencias de asistencia',
+            'Ver todas las evidencias', 'Ver evidencias de sus ubicaciones',
         ];
 
         foreach ($permissions as $permission) {
@@ -58,11 +63,14 @@ class RolesAndPermissionsSeeder extends Seeder
             'Ver mis asistencias',
             'Ver colaboradores',
             'Ver asignaciones',
+            'Ver evidencias de asistencia',
+            'Ver evidencias de sus ubicaciones',
         ]);
 
         $colaborador->syncPermissions([
             'Ver mis asistencias',
             'Ver dashboard',
+            'Registrar mi asistencia',
         ]);
 
         $rh->syncPermissions([
@@ -75,6 +83,9 @@ class RolesAndPermissionsSeeder extends Seeder
             'Ver asistencias',
             'Ver turnos',
             'Registrar asistencias',
+            'Ver evidencias de asistencia',
+            'Revisar evidencias de asistencia',
+            'Ver todas las evidencias',
         ]);
 
         $adminUser = User::firstOrCreate(

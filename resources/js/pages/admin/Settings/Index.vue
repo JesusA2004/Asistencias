@@ -1,0 +1,74 @@
+<script setup lang="ts">
+import { useForm } from '@inertiajs/vue3';
+import { Settings2 } from '@lucide/vue';
+import { computed } from 'vue';
+import PageHeader from '@/components/PageHeader.vue';
+import SystemSettingsForm from '@/components/SystemSettingsForm.vue';
+import type { SettingsFormData } from '@/components/SystemSettingsForm.vue';
+import { Card, CardContent } from '@/components/ui/card';
+import type { Setting } from '@/types/models';
+
+const props = defineProps<{
+    settings: Record<string, Setting[]>;
+}>();
+
+const flatSettings = computed<Setting[]>(() => Object.values(props.settings).flat());
+
+const settingsByKey = computed<Record<string, Setting>>(() =>
+    Object.fromEntries(flatSettings.value.map((s) => [s.key, s])),
+);
+
+const raw = (key: string) => settingsByKey.value[key]?.value;
+const asBool = (key: string) => raw(key) === '1';
+const asInt = (key: string, fallback: number) => (raw(key) !== undefined && raw(key) !== null ? Number(raw(key)) : fallback);
+
+const form = useForm<SettingsFormData>({
+    allow_employee_self_attendance: asBool('allow_employee_self_attendance'),
+    employee_self_attendance_requires_photo: asBool('employee_self_attendance_requires_photo'),
+    employee_self_attendance_allow_exit: asBool('employee_self_attendance_allow_exit'),
+    employee_self_attendance_requires_location: asBool('employee_self_attendance_requires_location'),
+    supervisor_capture_requires_photo: asBool('supervisor_capture_requires_photo'),
+    supervisor_capture_photo_per_employee: asBool('supervisor_capture_photo_per_employee'),
+    attendance_photo_review_enabled: asBool('attendance_photo_review_enabled'),
+    attendance_photo_retention_days: asInt('attendance_photo_retention_days', 90),
+    attendance_warning_text: raw('attendance_warning_text') ?? '',
+    attendance_warning_version: asInt('attendance_warning_version', 1),
+});
+
+const onUpdate = (value: SettingsFormData) => {
+    Object.assign(form, value);
+};
+
+const submit = () => {
+    form.patch('/configuracion', {
+        preserveScroll: true,
+    });
+};
+</script>
+
+<template>
+    <div class="p-6 max-w-3xl">
+        <PageHeader
+            title="Configuración"
+            description="Parámetros operativos del sistema: asistencia propia, captura con evidencia y revisión de fotografías."
+        />
+
+        <Card>
+            <CardContent class="pt-6">
+                <SystemSettingsForm
+                    :settings-by-key="settingsByKey"
+                    :model-value="form as unknown as SettingsFormData"
+                    :errors="form.errors"
+                    :processing="form.processing"
+                    @update:model-value="onUpdate"
+                    @submit="submit"
+                />
+            </CardContent>
+        </Card>
+
+        <div class="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
+            <Settings2 class="h-3.5 w-3.5" />
+            <span>Los cambios se aplican de inmediato en todo el sistema.</span>
+        </div>
+    </div>
+</template>

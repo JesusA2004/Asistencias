@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AttendanceEmployeeCard from '@/components/AttendanceEmployeeCard.vue';
+import AttendancePhotoField from '@/components/AttendancePhotoField.vue';
 import FormField from '@/components/FormField.vue';
 import { Input } from '@/components/ui/input';
 import { formatTimeMx } from '@/lib/formatters';
@@ -17,13 +18,22 @@ export interface ExitEmployee {
     entryTime: string | null;
 }
 
-defineProps<{
-    employees: ExitEmployee[];
-    records: Record<number, ExitRecord>;
-}>();
+withDefaults(
+    defineProps<{
+        employees: ExitEmployee[];
+        records: Record<number, ExitRecord>;
+        photosRequired?: boolean;
+        photos?: Record<number, File | null>;
+    }>(),
+    {
+        photosRequired: false,
+        photos: () => ({}),
+    },
+);
 
 const emit = defineEmits<{
     update: [employeeId: number, patch: Partial<ExitRecord>];
+    'photo-update': [employeeId: number, file: File | null];
 }>();
 </script>
 
@@ -56,6 +66,14 @@ const emit = defineEmits<{
                         @update:model-value="emit('update', emp.id, { notes: String($event) })"
                     />
                 </FormField>
+            </div>
+            <div v-if="photosRequired" class="mt-3">
+                <AttendancePhotoField
+                    :model-value="photos[emp.id] ?? null"
+                    :required="true"
+                    :employee-name="emp.name"
+                    @update:model-value="emit('photo-update', emp.id, $event)"
+                />
             </div>
         </AttendanceEmployeeCard>
     </div>

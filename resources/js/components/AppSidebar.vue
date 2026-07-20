@@ -3,14 +3,17 @@ import { Link, usePage } from '@inertiajs/vue3';
 import {
     BarChart3,
     Building2,
+    Camera,
     ClipboardList,
     Clock,
     Eye,
     HardHat,
     History,
+    Image,
     LayoutDashboard,
     MapPin,
     PenLine,
+    Settings,
     Shield,
     UserCheck,
     Users,
@@ -65,6 +68,8 @@ const navGroups = computed((): NavGroup[] => [
             ...(has('Registrar asistencias') ? [{ title: 'Capturar Asistencia', href: '/asistencias/capturar', icon: ClipboardList }] : []),
             ...(has('Ver asistencias') ? [{ title: 'Gestión Asistencias', href: '/asistencias', icon: PenLine }] : []),
             ...(has('Ver mis asistencias') ? [{ title: 'Mis Asistencias', href: '/mis-asistencias', icon: Eye }] : []),
+            ...(has('Registrar mi asistencia') ? [{ title: 'Mi Asistencia', href: '/mi-asistencia/registrar', icon: Camera }] : []),
+            ...(has('Ver evidencias de asistencia') ? [{ title: 'Evidencias de Asistencia', href: '/evidencias-asistencia', icon: Image }] : []),
         ],
     },
     {
@@ -72,6 +77,12 @@ const navGroups = computed((): NavGroup[] => [
         items: [
             ...(has('Ver reportes') ? [{ title: 'Reportes', href: '/reportes', icon: BarChart3 }] : []),
             ...(has('Ver auditoría') ? [{ title: 'Auditoría', href: '/auditoria', icon: History }] : []),
+        ],
+    },
+    {
+        label: 'Sistema',
+        items: [
+            ...(has('Ver configuración') ? [{ title: 'Configuración', href: '/configuracion', icon: Settings }] : []),
         ],
     },
 ]);

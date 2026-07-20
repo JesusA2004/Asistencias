@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AttendanceEmployeeCard from '@/components/AttendanceEmployeeCard.vue';
+import AttendancePhotoField from '@/components/AttendancePhotoField.vue';
 import FormField from '@/components/FormField.vue';
 import { Input } from '@/components/ui/input';
 import { statusVisual } from '@/lib/status';
@@ -19,13 +20,22 @@ export interface EntryEmployee {
     shiftName?: string | null;
 }
 
-defineProps<{
-    employees: EntryEmployee[];
-    records: Record<number, EntryRecord>;
-}>();
+withDefaults(
+    defineProps<{
+        employees: EntryEmployee[];
+        records: Record<number, EntryRecord>;
+        photosRequired?: boolean;
+        photos?: Record<number, File | null>;
+    }>(),
+    {
+        photosRequired: false,
+        photos: () => ({}),
+    },
+);
 
 const emit = defineEmits<{
     update: [employeeId: number, patch: Partial<EntryRecord>];
+    'photo-update': [employeeId: number, file: File | null];
 }>();
 
 const ENTRY_STATUSES: AttendanceStatus[] = ['presente', 'retardo'];
@@ -73,6 +83,14 @@ const ENTRY_STATUSES: AttendanceStatus[] = ['presente', 'retardo'];
                     @update:model-value="emit('update', emp.id, { notes: String($event) })"
                 />
             </FormField>
+            <div v-if="photosRequired" class="mt-3">
+                <AttendancePhotoField
+                    :model-value="photos[emp.id] ?? null"
+                    :required="true"
+                    :employee-name="emp.name"
+                    @update:model-value="emit('photo-update', emp.id, $event)"
+                />
+            </div>
         </AttendanceEmployeeCard>
     </div>
 </template>

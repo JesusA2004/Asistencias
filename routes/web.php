@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\AttendanceController;
+use App\Http\Controllers\Admin\AttendanceEvidenceController;
 use App\Http\Controllers\Admin\AuditController;
 use App\Http\Controllers\Admin\ClientController;
 use App\Http\Controllers\Admin\DashboardController;
@@ -10,12 +11,16 @@ use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\ServicePointController;
 use App\Http\Controllers\Admin\ShiftController;
 use App\Http\Controllers\Admin\SupervisorAssignmentController;
+use App\Http\Controllers\Admin\SystemSettingController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\AttendancePhotoController;
+use App\Http\Controllers\AttendanceWarningAcceptanceController;
 use App\Http\Controllers\Employee\MyAttendanceController;
+use App\Http\Controllers\Employee\SelfAttendanceController;
 use App\Http\Controllers\Supervisor\AttendanceCaptureController;
 use Illuminate\Support\Facades\Route;
 
-Route::inertia('/', 'Welcome')->name('home');
+Route::get('/', fn () => auth()->check() ? redirect()->route('dashboard') : redirect()->route('login'))->name('home');
 
 // Bloquear registro público — redirige a login
 Route::get('/register', fn () => redirect()->route('login'))->name('register');
@@ -97,6 +102,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/mis-asistencias', [MyAttendanceController::class, 'index'])->name('mis-asistencias.index');
     });
 
+    Route::middleware('permission:Registrar mi asistencia')->group(function () {
+        Route::get('/mi-asistencia/registrar', [SelfAttendanceController::class, 'index'])->name('mi-asistencia.index');
+        Route::post('/mi-asistencia/entrada', [SelfAttendanceController::class, 'storeEntry'])->name('mi-asistencia.entrada');
+        Route::post('/mi-asistencia/salida', [SelfAttendanceController::class, 'storeExit'])->name('mi-asistencia.salida');
+    });
+
     // ── Reportes ─────────────────────────────────────────────────────
     Route::middleware('permission:Ver reportes')->group(function () {
         Route::get('/reportes', [ReportController::class, 'index'])->name('reportes.index');
@@ -111,6 +122,25 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::middleware('permission:Ver auditoría')->group(function () {
         Route::get('/auditoria', [AuditController::class, 'index'])->name('auditoria.index');
     });
+
+    // ── Configuración ────────────────────────────────────────────────
+    Route::middleware('permission:Ver configuración')->group(function () {
+        Route::get('/configuracion', [SystemSettingController::class, 'index'])->name('configuracion.index');
+    });
+
+    Route::middleware('permission:Editar configuración')->group(function () {
+        Route::patch('/configuracion', [SystemSettingController::class, 'update'])->name('configuracion.update');
+    });
+
+    // ── Evidencias de Asistencia ────────────────────────────────────────
+    Route::middleware('permission:Ver evidencias de asistencia')->group(function () {
+        Route::get('/evidencias-asistencia', [AttendanceEvidenceController::class, 'index'])->name('evidencias.index');
+        Route::get('/evidencias-asistencia/{photo}/foto', [AttendancePhotoController::class, 'show'])->name('evidencias.foto');
+        Route::get('/evidencias-asistencia/{photo}/miniatura', [AttendancePhotoController::class, 'thumbnail'])->name('evidencias.miniatura');
+    });
+
+    // Aceptación del aviso de evidencia fotográfica: cualquier autenticado que llegue a un flujo con cámara.
+    Route::post('/asistencias/aceptar-aviso', [AttendanceWarningAcceptanceController::class, 'store'])->name('asistencias.aceptar-aviso');
 });
 
-require __DIR__ . '/settings.php';
+require __DIR__.'/settings.php';
