@@ -80,7 +80,7 @@ const onCardClick = () => {
                 <p v-else-if="modelValue && activeHint" class="text-xs font-medium text-primary">{{ activeHint }}</p>
             </div>
 
-            <Switch :checked="modelValue" :disabled="disabled" @click.stop @update:checked="onCheckedChange" />
+            <Switch :model-value="modelValue" :disabled="disabled" @click.stop @update:model-value="onCheckedChange" />
         </div>
     </div>
 </template>
