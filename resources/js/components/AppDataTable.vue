@@ -96,9 +96,9 @@ const totalColumns = () => props.columns.length + (slots.actions ? 1 : 0);
             <slot name="filters" />
         </div>
 
-        <!-- Desktop: tabla -->
-        <div class="hidden md:block rounded-lg border bg-card overflow-hidden">
-            <div :class="{ 'overflow-x-auto': columns.length > 6 }">
+        <!-- Desktop ancho real: tabla. Bajo xl siempre son cards — nunca overflow-x-auto. -->
+        <div class="hidden xl:block rounded-lg border bg-card">
+            <div class="min-w-0">
                 <Table>
                     <TableHeader>
                         <TableRow v-for="headerGroup in table.getHeaderGroups()" :key="headerGroup.id" class="bg-muted/30">
@@ -154,7 +154,7 @@ const totalColumns = () => props.columns.length + (slots.actions ? 1 : 0);
         </div>
 
         <!-- Mobile/tablet: cards -->
-        <div class="md:hidden space-y-3">
+        <div class="xl:hidden space-y-3">
             <template v-if="loading">
                 <div v-for="i in 4" :key="i" class="rounded-lg border bg-card p-4 space-y-2">
                     <Skeleton class="h-4 w-2/3" />

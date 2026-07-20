@@ -28,7 +28,6 @@ const form = useForm<SettingsFormData>({
     employee_self_attendance_allow_exit: asBool('employee_self_attendance_allow_exit'),
     employee_self_attendance_requires_location: asBool('employee_self_attendance_requires_location'),
     supervisor_capture_requires_photo: asBool('supervisor_capture_requires_photo'),
-    supervisor_capture_photo_per_employee: asBool('supervisor_capture_photo_per_employee'),
     attendance_photo_review_enabled: asBool('attendance_photo_review_enabled'),
     attendance_photo_retention_days: asInt('attendance_photo_retention_days', 90),
     attendance_warning_text: raw('attendance_warning_text') ?? '',
@@ -36,15 +35,11 @@ const form = useForm<SettingsFormData>({
 });
 
 const onUpdate = (value: SettingsFormData) => {
-    // El flujo correcto es una foto por colaborador: al encender "Exigir foto al
-    // capturar asistencia" se activa también "Foto individual por colaborador" de
-    // una vez, sin que el admin tenga que acordarse de prender los dos switches.
     const turningOnRequiresPhoto = value.supervisor_capture_requires_photo && !form.supervisor_capture_requires_photo;
 
     if (turningOnRequiresPhoto) {
-        value.supervisor_capture_photo_per_employee = true;
         notify.warning(
-            'Al activar esta opción, los supervisores deberán capturar una fotografía por cada colaborador seleccionado antes de poder guardar la asistencia.',
+            'A partir de ahora, quien capture asistencia (supervisor, admin o RH) deberá tomar una fotografía por cada colaborador seleccionado antes de poder guardar entrada o salida. Sin excepciones.',
             'Evidencia fotográfica obligatoria',
         );
     }

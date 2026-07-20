@@ -19,7 +19,6 @@ class UpdateSettingsRequest extends FormRequest
             'employee_self_attendance_allow_exit' => 'required|boolean',
             'employee_self_attendance_requires_location' => 'required|boolean',
             'supervisor_capture_requires_photo' => 'required|boolean',
-            'supervisor_capture_photo_per_employee' => 'required|boolean',
             'attendance_photo_review_enabled' => 'required|boolean',
             'attendance_photo_retention_days' => 'required|integer|min:1|max:3650',
             'attendance_warning_text' => 'required|string|max:2000',

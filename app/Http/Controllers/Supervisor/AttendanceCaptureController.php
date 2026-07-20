@@ -96,7 +96,6 @@ class AttendanceCaptureController extends Controller
             'canUseManualCapture' => $user->can('manualCapture', Attendance::class),
             'settings' => [
                 'requires_photo' => setting('supervisor_capture_requires_photo', false),
-                'photo_per_employee' => setting('supervisor_capture_photo_per_employee', true),
                 'warning_text' => setting('attendance_warning_text', ''),
                 'warning_version' => (int) setting('attendance_warning_version', 1),
                 'needs_warning_acceptance' => setting('supervisor_capture_requires_photo', false) && ! AttendanceTermsAcceptance::where('user_id', $user->id)
@@ -150,11 +149,10 @@ class AttendanceCaptureController extends Controller
     }
 
     /**
-     * Si "supervisor_capture_requires_photo" está activo, exige evidencia fotográfica.
-     * Con "supervisor_capture_photo_per_employee" activo (el caso normal) exige una foto
-     * por cada colaborador de la lista; si está desactivado, basta con que exista al
-     * menos una foto en el lote (el esquema liga cada foto a un solo colaborador, así
-     * que "una foto general" no aplica: se interpreta como "al menos una evidencia").
+     * Si "supervisor_capture_requires_photo" está activo, exige una fotografía por cada
+     * colaborador de la lista, sin excepción. No existe modo "una foto para todo el lote":
+     * ese hueco permitía registrar entrada/salida sin evidencia para colaboradores
+     * adicionales y quedó retirado a propósito.
      */
     private function checkPhotosPresent(Request $request, array $employeeIds): ?string
     {
@@ -163,19 +161,14 @@ class AttendanceCaptureController extends Controller
         }
 
         $photos = $request->file('photos', []);
-        $perEmployee = setting('supervisor_capture_photo_per_employee', true);
 
-        if ($perEmployee) {
-            foreach ($employeeIds as $employeeId) {
-                if (empty($photos[$employeeId])) {
-                    return 'Falta la fotografía de uno o más colaboradores. La captura con evidencia fotográfica es obligatoria.';
-                }
+        foreach ($employeeIds as $employeeId) {
+            if (empty($photos[$employeeId])) {
+                return 'Falta la fotografía de uno o más colaboradores. La captura con evidencia fotográfica es obligatoria.';
             }
-
-            return null;
         }
 
-        return empty(array_filter($photos)) ? 'Debes capturar al menos una fotografía de evidencia.' : null;
+        return null;
     }
 
     private function captureOriginFor(User $user): string
@@ -459,10 +452,8 @@ class AttendanceCaptureController extends Controller
             return back()->with('error', $error);
         }
 
-        if ($error = $this->checkPhotosPresent($request, $request->employee_ids)) {
-            return back()->with('error', $error);
-        }
-
+        // La incidencia (falta, descanso, permiso, incapacidad, retardo) no exige evidencia
+        // fotográfica: no hay una "asistencia" física que fotografiar.
         $created = 0;
         $skipped = 0;
         $origin = $this->captureOriginFor($user);

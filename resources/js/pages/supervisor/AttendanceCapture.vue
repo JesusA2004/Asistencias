@@ -41,7 +41,6 @@ const props = defineProps<{
     canUseManualCapture: boolean;
     settings: {
         requires_photo: boolean;
-        photo_per_employee: boolean;
         warning_text: string;
         warning_version: number;
         needs_warning_acceptance: boolean;
@@ -69,7 +68,9 @@ const photos = ref<Record<number, File | null>>({});
 const warningAccepted = ref(false);
 const photoQueueOpen = ref(false);
 
-const photosRequired = computed(() => props.settings.requires_photo);
+// La incidencia no exige evidencia fotográfica aunque la captura con foto esté
+// activa en Configuración: no hay una asistencia física que fotografiar.
+const photosRequired = computed(() => props.settings.requires_photo && action.value !== 'incidencia');
 
 const updatePhoto = (employeeId: number, file: File | null) => {
     photos.value = { ...photos.value, [employeeId]: file };
@@ -273,17 +274,10 @@ const photoQueueEmployees = computed(() => selectedEmployeeIds.value.map((id) =>
     return { id, name: e ? `${e.name} ${e.last_name}` : `Colaborador ${id}` };
 }));
 
-const missingRequiredPhotos = computed(() => {
-    if (!photosRequired.value) {
-        return false;
-    }
+// Regla estricta y sin excepciones: una foto por cada colaborador seleccionado.
+const missingPhotosCount = computed(() => Math.max(0, selectedEmployeeIds.value.length - photosCapturedCount.value));
 
-    if (props.settings.photo_per_employee) {
-        return photosCapturedCount.value < selectedEmployeeIds.value.length;
-    }
-
-    return photosCapturedCount.value < 1;
-});
+const missingRequiredPhotos = computed(() => photosRequired.value && missingPhotosCount.value > 0);
 
 const canSubmit = computed(() => {
     if (!selectedEmployeeIds.value.length) {
@@ -315,9 +309,7 @@ const canSubmit = computed(() => {
 
 const disabledReason = computed(() => {
     if (missingRequiredPhotos.value) {
-        return props.settings.photo_per_employee
-            ? 'Faltan fotografías por capturar: toma una foto por cada colaborador seleccionado.'
-            : 'Faltan fotografías por capturar: captura al menos una fotografía de evidencia.';
+        return `Faltan ${missingPhotosCount.value} fotografía${missingPhotosCount.value === 1 ? '' : 's'} obligatoria${missingPhotosCount.value === 1 ? '' : 's'}: toma una foto por cada colaborador seleccionado.`;
     }
 
     if (action.value === 'incidencia') {

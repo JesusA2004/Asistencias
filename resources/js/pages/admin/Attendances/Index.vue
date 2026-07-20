@@ -137,11 +137,12 @@ const clearFilters = () => {
     router.get('/asistencias/gestion', {}, { preserveState: true, replace: true });
 };
 
+// 6 columnas en la tabla de escritorio (Empresa + Punto se fusionan en "Ubicación")
+// para que quepa sin scroll horizontal desde 1280px.
 const columns: ColumnDef<Attendance>[] = [
     { accessorKey: 'attendance_date', header: 'Fecha' },
     { accessorKey: 'employee', header: 'Colaborador' },
-    { accessorKey: 'client', header: 'Empresa', cell: ({ row }) => row.original.client?.name },
-    { accessorKey: 'service_point', header: 'Punto', cell: ({ row }) => row.original.service_point?.name },
+    { accessorKey: 'client', header: 'Ubicación' },
     { accessorKey: 'status', header: 'Estado' },
     { accessorKey: 'schedule', header: 'Horario' },
     { accessorKey: 'supervisor', header: 'Supervisor', cell: ({ row }) => row.original.supervisor?.name },
@@ -199,6 +200,10 @@ const columns: ColumnDef<Attendance>[] = [
                 <div class="font-medium text-sm">{{ item.employee?.name }} {{ item.employee?.last_name }}</div>
                 <div class="text-xs text-muted-foreground font-mono">{{ item.employee?.employee_number }}</div>
             </template>
+            <template #cell-client="{ item }">
+                <div class="text-sm">{{ item.client?.name ?? '—' }}</div>
+                <div class="text-xs text-muted-foreground">{{ item.service_point?.name ?? '—' }}</div>
+            </template>
             <template #cell-status="{ item }">
                 <StatusBadge :status="item.status" />
             </template>
@@ -212,6 +217,50 @@ const columns: ColumnDef<Attendance>[] = [
                 <Button v-if="hasPermission('Eliminar asistencias')" variant="ghost" size="sm" class="text-destructive" @click="openDelete(item.id)">
                     <Trash2 class="h-3.5 w-3.5" />
                 </Button>
+            </template>
+
+            <template #mobile-card="{ item }">
+                <div class="rounded-xl border bg-card p-4 shadow-sm transition-all hover:shadow-md hover:border-primary/30">
+                    <div class="mb-3 flex items-start justify-between gap-2">
+                        <div class="min-w-0">
+                            <div class="font-medium text-sm">{{ item.employee?.name }} {{ item.employee?.last_name }}</div>
+                            <div class="text-xs text-muted-foreground font-mono">{{ item.employee?.employee_number }}</div>
+                        </div>
+                        <StatusBadge :status="item.status" />
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                        <div>
+                            <p class="text-xs text-muted-foreground">Fecha</p>
+                            <p class="font-medium">{{ formatShortDateMx(item.attendance_date) }}</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-muted-foreground">Horario</p>
+                            <p class="font-mono">{{ item.entry_time ?? '--:--' }} – {{ item.exit_time ?? '--:--' }}</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-muted-foreground">Empresa</p>
+                            <p class="truncate">{{ item.client?.name ?? '—' }}</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-muted-foreground">Punto</p>
+                            <p class="truncate">{{ item.service_point?.name ?? '—' }}</p>
+                        </div>
+                        <div class="col-span-2">
+                            <p class="text-xs text-muted-foreground">Supervisor</p>
+                            <p class="truncate">{{ item.supervisor?.name ?? '—' }}</p>
+                        </div>
+                    </div>
+
+                    <div v-if="hasPermission('Corregir asistencias') || hasPermission('Eliminar asistencias')" class="mt-3 flex items-center justify-end gap-1 border-t pt-2">
+                        <Button v-if="hasPermission('Corregir asistencias')" variant="ghost" size="sm" @click="openCorrect(item)">
+                            <Pencil class="h-3.5 w-3.5 mr-1.5" /> Corregir
+                        </Button>
+                        <Button v-if="hasPermission('Eliminar asistencias')" variant="ghost" size="sm" class="text-destructive" @click="openDelete(item.id)">
+                            <Trash2 class="h-3.5 w-3.5 mr-1.5" /> Eliminar
+                        </Button>
+                    </div>
+                </div>
             </template>
         </AppDataTable>
 

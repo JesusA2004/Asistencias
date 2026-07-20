@@ -14,7 +14,6 @@ export interface SettingsFormData {
     employee_self_attendance_allow_exit: boolean;
     employee_self_attendance_requires_location: boolean;
     supervisor_capture_requires_photo: boolean;
-    supervisor_capture_photo_per_employee: boolean;
     attendance_photo_review_enabled: boolean;
     attendance_photo_retention_days: number;
     attendance_warning_text: string;
@@ -102,16 +101,8 @@ const patch = <K extends keyof SettingsFormData>(key: K, value: SettingsFormData
                         :model-value="modelValue.supervisor_capture_requires_photo"
                         @update:model-value="patch('supervisor_capture_requires_photo', $event)"
                     />
-                    <SettingsToggleCard
-                        title="Foto individual por colaborador"
-                        :description="desc('supervisor_capture_photo_per_employee')"
-                        :model-value="modelValue.supervisor_capture_photo_per_employee"
-                        :disabled="!modelValue.supervisor_capture_requires_photo"
-                        :tooltip="!modelValue.supervisor_capture_requires_photo ? 'Activa primero la captura con foto.' : undefined"
-                        @update:model-value="patch('supervisor_capture_photo_per_employee', $event)"
-                    />
                     <p class="px-1 text-xs text-muted-foreground">
-                        Cuando está activo, el supervisor deberá tomar una fotografía por cada colaborador seleccionado antes de guardar.
+                        Cuando está activo, quien capture (supervisor, admin o RH) deberá tomar una fotografía por cada colaborador seleccionado antes de poder guardar entrada o salida. Sin excepciones.
                     </p>
                 </CardContent>
             </Card>

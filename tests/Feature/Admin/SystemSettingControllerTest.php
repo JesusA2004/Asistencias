@@ -38,7 +38,6 @@ class SystemSettingControllerTest extends TestCase
             'employee_self_attendance_allow_exit' => true,
             'employee_self_attendance_requires_location' => false,
             'supervisor_capture_requires_photo' => false,
-            'supervisor_capture_photo_per_employee' => true,
             'attendance_photo_review_enabled' => true,
             'attendance_photo_retention_days' => 60,
             'attendance_warning_text' => 'Texto de advertencia actualizado.',

@@ -59,11 +59,10 @@ class AttendanceCapturePhotoTest extends TestCase
         ]);
     }
 
-    private function requirePhoto(bool $perEmployee = true): void
+    private function requirePhoto(): void
     {
         app(SettingsRepository::class)->setMany([
             'supervisor_capture_requires_photo' => true,
-            'supervisor_capture_photo_per_employee' => $perEmployee,
         ]);
     }
 
@@ -139,27 +138,6 @@ class AttendanceCapturePhotoTest extends TestCase
         $this->assertDatabaseCount('attendances', 0);
     }
 
-    public function test_at_least_one_photo_suffices_when_per_employee_disabled(): void
-    {
-        $this->requirePhoto(perEmployee: false);
-
-        $this->actingAs($this->supervisor)
-            ->post('/asistencias/capturar/entrada', [
-                ...$this->basePayload(),
-                'entries' => [
-                    ['employee_id' => $this->employeeA->id, 'entry_time' => '08:00', 'status' => 'presente'],
-                    ['employee_id' => $this->employeeB->id, 'entry_time' => '08:05', 'status' => 'presente'],
-                ],
-                'photos' => [
-                    $this->employeeA->id => UploadedFile::fake()->image('a.jpg'),
-                ],
-            ])
-            ->assertRedirect();
-
-        $this->assertDatabaseCount('attendances', 2);
-        $this->assertSame(1, AttendancePhoto::count());
-    }
-
     public function test_exit_requires_photo_when_enabled(): void
     {
         $this->actingAs($this->supervisor)->post('/asistencias/capturar/entrada', [
@@ -196,8 +174,11 @@ class AttendanceCapturePhotoTest extends TestCase
         $this->assertSame($this->employeeA->id, $photo->employee_id);
     }
 
-    public function test_incident_requires_photo_when_enabled(): void
+    public function test_incident_does_not_require_photo(): void
     {
+        // La incidencia (falta, descanso, permiso, incapacidad, retardo) nunca exige
+        // evidencia fotográfica, aunque "supervisor_capture_requires_photo" esté activo:
+        // no hay una asistencia física que fotografiar.
         $this->requirePhoto();
 
         $this->actingAs($this->supervisor)
@@ -206,18 +187,10 @@ class AttendanceCapturePhotoTest extends TestCase
                 'status' => 'falta',
                 'employee_ids' => [$this->employeeA->id],
             ])
-            ->assertSessionHas('error');
-
-        $this->actingAs($this->supervisor)
-            ->post('/asistencias/capturar/incidencia', [
-                ...$this->basePayload(),
-                'status' => 'falta',
-                'employee_ids' => [$this->employeeA->id],
-                'photos' => [$this->employeeA->id => UploadedFile::fake()->image('falta.jpg')],
-            ])
             ->assertRedirect();
 
-        $this->assertSame(1, AttendancePhoto::where('capture_type', 'incidencia')->count());
+        $this->assertDatabaseCount('attendances', 1);
+        $this->assertSame(0, AttendancePhoto::where('capture_type', 'incidencia')->count());
     }
 
     public function test_manual_capture_requires_photo_when_enabled(): void

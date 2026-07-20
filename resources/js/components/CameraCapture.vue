@@ -41,11 +41,11 @@ const mapError = (err: unknown): string => {
     const name = err instanceof DOMException ? err.name : '';
 
     if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
-        return 'Permiso de cámara denegado. Actívalo en la configuración de tu navegador para continuar.';
+        return 'Debes permitir el acceso a la cámara para registrar asistencia.';
     }
 
     if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
-        return 'No se detectó ninguna cámara en este dispositivo.';
+        return 'Este dispositivo no tiene cámara disponible. No es posible registrar asistencia con evidencia obligatoria.';
     }
 
     if (name === 'NotReadableError') {
