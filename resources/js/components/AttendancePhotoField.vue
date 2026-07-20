@@ -6,6 +6,7 @@ import FormDialogContent from '@/components/FormDialogContent.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { cn } from '@/lib/utils';
 
 const props = withDefaults(
     defineProps<{
@@ -57,6 +58,13 @@ const state = computed<'capturada' | 'requerida' | 'pendiente'>(() => {
     return props.required ? 'requerida' : 'pendiente';
 });
 
+const dialogTitle = computed(() => (props.employeeName ? `Fotografía de ${props.employeeName}` : props.label));
+const faceHint = computed(() =>
+    props.employeeName
+        ? `Asegúrate de que el rostro de ${props.employeeName} sea claramente visible en la fotografía.`
+        : undefined,
+);
+
 const onCaptured = (file: File) => {
     emit('update:modelValue', file);
     open.value = false;
@@ -64,9 +72,15 @@ const onCaptured = (file: File) => {
 </script>
 
 <template>
-    <div class="flex items-center justify-between gap-3 rounded-lg border p-3">
-        <div class="flex items-center gap-3 min-w-0">
-            <div class="h-12 w-12 shrink-0 overflow-hidden rounded-md bg-muted">
+    <div
+        :class="cn(
+            'flex items-center justify-between gap-3 rounded-lg border p-3 transition-colors',
+            state === 'requerida' ? 'border-destructive/50 bg-destructive/5' : '',
+            state === 'capturada' ? 'border-green-300 bg-green-50/50 dark:border-green-900 dark:bg-green-950/20' : '',
+        )"
+    >
+        <div class="flex min-w-0 items-center gap-3">
+            <div class="h-14 w-14 shrink-0 overflow-hidden rounded-md bg-muted ring-1 ring-border">
                 <img v-if="previewUrl" :src="previewUrl" alt="Miniatura de evidencia" class="h-full w-full object-cover" />
                 <div v-else class="flex h-full w-full items-center justify-center text-muted-foreground">
                     <Camera class="h-5 w-5" />
@@ -87,16 +101,16 @@ const onCaptured = (file: File) => {
         <Button type="button" size="sm" :variant="modelValue ? 'outline' : 'default'" @click="open = true">
             <RotateCcw v-if="modelValue" class="mr-2 h-3.5 w-3.5" />
             <Camera v-else class="mr-2 h-3.5 w-3.5" />
-            {{ modelValue ? 'Cambiar' : 'Capturar' }}
+            {{ modelValue ? 'Cambiar foto' : 'Tomar foto' }}
         </Button>
     </div>
 
     <Dialog :open="open" @update:open="open = $event">
         <FormDialogContent class="max-w-md">
             <DialogHeader>
-                <DialogTitle>{{ employeeName ?? label }}</DialogTitle>
+                <DialogTitle>{{ dialogTitle }}</DialogTitle>
             </DialogHeader>
-            <CameraCapture @captured="onCaptured" @cancel="open = false" />
+            <CameraCapture :face-hint="faceHint" @captured="onCaptured" @cancel="open = false" />
         </FormDialogContent>
     </Dialog>
 </template>

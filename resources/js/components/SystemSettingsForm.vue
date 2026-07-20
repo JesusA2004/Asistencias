@@ -95,8 +95,12 @@ const patch = <K extends keyof SettingsFormData>(key: K, value: SettingsFormData
                         :description="desc('supervisor_capture_photo_per_employee')"
                         :model-value="modelValue.supervisor_capture_photo_per_employee"
                         :disabled="!modelValue.supervisor_capture_requires_photo"
+                        :tooltip="!modelValue.supervisor_capture_requires_photo ? 'Activa primero la captura con foto.' : undefined"
                         @update:model-value="patch('supervisor_capture_photo_per_employee', $event)"
                     />
+                    <p class="px-1 text-xs text-muted-foreground">
+                        Cuando está activo, el supervisor deberá tomar una fotografía por cada colaborador seleccionado antes de guardar.
+                    </p>
                 </CardContent>
             </Card>
 

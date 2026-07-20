@@ -5,6 +5,7 @@ import { computed } from 'vue';
 import PageHeader from '@/components/PageHeader.vue';
 import SystemSettingsForm from '@/components/SystemSettingsForm.vue';
 import type { SettingsFormData } from '@/components/SystemSettingsForm.vue';
+import { notify } from '@/lib/notify';
 import type { Setting } from '@/types/models';
 
 const props = defineProps<{
@@ -35,12 +36,28 @@ const form = useForm<SettingsFormData>({
 });
 
 const onUpdate = (value: SettingsFormData) => {
+    // El flujo correcto es una foto por colaborador: al encender "Exigir foto al
+    // capturar asistencia" se activa también "Foto individual por colaborador" de
+    // una vez, sin que el admin tenga que acordarse de prender los dos switches.
+    const turningOnRequiresPhoto = value.supervisor_capture_requires_photo && !form.supervisor_capture_requires_photo;
+
+    if (turningOnRequiresPhoto) {
+        value.supervisor_capture_photo_per_employee = true;
+        notify.warning(
+            'Al activar esta opción, los supervisores deberán capturar una fotografía por cada colaborador seleccionado antes de poder guardar la asistencia.',
+            'Evidencia fotográfica obligatoria',
+        );
+    }
+
     Object.assign(form, value);
 };
 
 const submit = () => {
     form.patch('/configuracion', {
         preserveScroll: true,
+        // El toast de éxito ya lo dispara el handler global de flash (back()->with('success', ...)).
+        // Los errores de validación (422) no pasan por flash, así que sí necesitan aviso explícito aquí.
+        onError: () => notify.error('No se pudo guardar la configuración. Revisa los campos e intenta de nuevo.'),
     });
 };
 </script>

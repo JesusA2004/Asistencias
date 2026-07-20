@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { router } from '@inertiajs/vue3';
-import { AlertTriangle, ClipboardList, ShieldCheck, Users } from '@lucide/vue';
+import { AlertTriangle, Camera, ClipboardList, ShieldCheck, Users } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
-import { toast } from 'vue-sonner';
 import AttendanceActionSelector from '@/components/AttendanceActionSelector.vue';
 import type {CaptureAction} from '@/components/AttendanceActionSelector.vue';
 import AttendanceContextToolbar from '@/components/AttendanceContextToolbar.vue';
@@ -19,8 +18,10 @@ import AttendanceProgressSummary from '@/components/AttendanceProgressSummary.vu
 import AttendanceSummaryBar from '@/components/AttendanceSummaryBar.vue';
 import AttendanceWarningDialog from '@/components/AttendanceWarningDialog.vue';
 import PageHeader from '@/components/PageHeader.vue';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useInertiaLoading } from '@/composables/useInertiaLoading';
 import { deriveCaptureState, nowTime, suggestEntryStatus } from '@/lib/attendance';
+import { notify } from '@/lib/notify';
 import type { Attendance, AttendanceStatus, Client, Employee, ServicePoint, Shift } from '@/types/models';
 
 type EmployeeWithShift = Employee & { shift?: Pick<Shift, 'id' | 'name' | 'start_time' | 'end_time' | 'tolerance_minutes'> | null };
@@ -300,6 +301,30 @@ const canSubmit = computed(() => {
     return true;
 });
 
+const disabledReason = computed(() => {
+    if (missingRequiredPhotos.value) {
+        return props.settings.photo_per_employee
+            ? 'Faltan fotografías por capturar: toma una foto por cada colaborador seleccionado.'
+            : 'Faltan fotografías por capturar: captura al menos una fotografía de evidencia.';
+    }
+
+    if (action.value === 'incidencia') {
+        if (!incidentStatus.value) {
+            return 'Selecciona el tipo de incidencia.';
+        }
+
+        if (incidentRequiresNotes.value && incidentNotes.value.trim().length < 5) {
+            return 'Escribe el motivo de la incidencia (mínimo 5 caracteres).';
+        }
+    }
+
+    if (action.value === 'manual' && manualAnyExisting.value && manualReason.value.trim().length < 10) {
+        return 'Indica el motivo de la corrección (mínimo 10 caracteres).';
+    }
+
+    return undefined;
+});
+
 const needsWarning = computed(() => photosRequired.value && props.settings.needs_warning_acceptance && !warningAccepted.value);
 
 const acceptWarning = () => {
@@ -330,20 +355,7 @@ const submitLabel = computed(() => ({
     manual: 'Guardar captura manual',
 }[action.value ?? 'entrada']));
 
-const handleFlash = (page: unknown) => {
-    const props = (page as { props?: Record<string, unknown> })?.props ?? {};
-    const flash = (props.flash ?? {}) as { success?: string | null; error?: string | null };
-
-    if (flash.success) {
-        toast.success(flash.success);
-    }
-
-    if (flash.error) {
-        toast.error(flash.error);
-    }
-};
-
-const loadEmployees = (notify = false) => {
+const loadEmployees = (notifyChange = false) => {
     const hadSelection = selectedEmployeeIds.value.length > 0;
     selectedEmployeeIds.value = [];
     action.value = null;
@@ -355,8 +367,8 @@ const loadEmployees = (notify = false) => {
         preserveState: true,
         replace: true,
         onSuccess: () => {
-            if (notify && hadSelection) {
-                toast.message('Se limpió la selección de colaboradores al cambiar de contexto.');
+            if (notifyChange && hadSelection) {
+                notify.info('Se limpió la selección de colaboradores al cambiar de contexto.');
             }
         },
     });
@@ -394,8 +406,8 @@ const submit = () => {
     const onFinish = () => {
  saving.value = false;
 };
-    const onSuccess = (page: unknown) => {
-        handleFlash(page);
+    const onSuccess = () => {
+        // El toast/alerta de éxito o error ya lo dispara el handler global de flash.
         selectedEmployeeIds.value = [];
         photos.value = {};
     };
@@ -425,9 +437,11 @@ const submit = () => {
             photos: photosPayload,
         }, {
             preserveScroll: true,
-            onSuccess: (page) => {
- onSuccess(page); incidentStatus.value = null; incidentNotes.value = '';
-},
+            onSuccess: () => {
+                onSuccess();
+                incidentStatus.value = null;
+                incidentNotes.value = '';
+            },
             onFinish,
         });
     } else if (action.value === 'manual') {
@@ -438,9 +452,10 @@ const submit = () => {
             photos: photosPayload,
         }, {
             preserveScroll: true,
-            onSuccess: (page) => {
- onSuccess(page); manualReason.value = '';
-},
+            onSuccess: () => {
+                onSuccess();
+                manualReason.value = '';
+            },
             onFinish,
         });
     }
@@ -456,6 +471,14 @@ const noClientsMessage = computed(() =>
 <template>
     <div class="w-full p-6">
         <PageHeader title="Capturar Asistencia" description="Registra la asistencia diaria de tus colaboradores" />
+
+        <Alert v-if="photosRequired" class="mb-6 border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40">
+            <Camera class="h-4 w-4 text-amber-700 dark:text-amber-400" />
+            <AlertTitle class="text-amber-800 dark:text-amber-300">Evidencia fotográfica obligatoria</AlertTitle>
+            <AlertDescription class="text-amber-800/90 dark:text-amber-300/80">
+                Deberás tomar una fotografía por cada colaborador seleccionado antes de guardar.
+            </AlertDescription>
+        </Alert>
 
         <AttendanceGuidedEmptyState
             v-if="!clients.length"
@@ -522,6 +545,11 @@ const noClientsMessage = computed(() =>
                             <AttendanceEmployeePicker v-model="selectedEmployeeIds" :options="pickerOptions" />
                         </div>
 
+                        <div v-if="photosRequired && selectedEmployeeIds.length" class="mb-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+                            <Camera class="h-4 w-4" />
+                            <span>{{ photosCapturedCount }} de {{ selectedEmployeeIds.length }} fotografías capturadas</span>
+                        </div>
+
                         <template v-if="!selectedEmployeeIds.length">
                             <AttendanceGuidedEmptyState
                                 title="Selecciona colaboradores para continuar"
@@ -579,6 +607,7 @@ const noClientsMessage = computed(() =>
                                 :submit-label="submitLabel"
                                 :saving="saving"
                                 :disabled="!canSubmit"
+                                :disabled-reason="disabledReason"
                                 :photos-captured="photosRequired ? photosCapturedCount : undefined"
                                 :photos-total="photosRequired ? selectedEmployeeIds.length : undefined"
                                 @save="submit"

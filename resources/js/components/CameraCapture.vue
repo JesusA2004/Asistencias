@@ -2,13 +2,16 @@
 import { AlertCircle, Camera, RefreshCw, RotateCcw, Check, SwitchCamera } from '@lucide/vue';
 import { onBeforeUnmount, ref } from 'vue';
 import { Button } from '@/components/ui/button';
+import { notify } from '@/lib/notify';
 
 const props = withDefaults(
     defineProps<{
         facingMode?: 'user' | 'environment';
+        faceHint?: string;
     }>(),
     {
         facingMode: 'user',
+        faceHint: 'Asegúrate de que el rostro sea claramente visible en la fotografía.',
     },
 );
 
@@ -69,6 +72,7 @@ const startCamera = async () => {
         errorMessage.value = 'Tu navegador no soporta captura de cámara. Usa un navegador actualizado.';
         status.value = 'error';
         emit('error', errorMessage.value);
+        notify.error(errorMessage.value, 'No se pudo abrir la cámara');
 
         return;
     }
@@ -91,6 +95,7 @@ const startCamera = async () => {
         errorMessage.value = mapError(err);
         status.value = 'error';
         emit('error', errorMessage.value);
+        notify.error(errorMessage.value, 'No se pudo abrir la cámara');
     }
 };
 
@@ -207,9 +212,12 @@ void startCamera();
 
         <canvas ref="canvasRef" class="hidden" />
 
-        <p class="text-center text-xs text-muted-foreground">
-            La fotografía se toma directamente con la cámara. No se permite subir imágenes desde la galería.
-        </p>
+        <div class="space-y-1 text-center">
+            <p v-if="status !== 'error'" class="text-xs font-medium text-foreground">{{ faceHint }}</p>
+            <p class="text-xs text-muted-foreground">
+                La fotografía se toma directamente con la cámara. No se permite subir imágenes desde la galería.
+            </p>
+        </div>
 
         <div class="flex justify-center gap-2">
             <template v-if="status === 'live'">

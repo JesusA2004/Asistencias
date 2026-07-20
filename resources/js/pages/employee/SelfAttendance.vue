@@ -21,6 +21,7 @@ import { Dialog, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { deriveCaptureState } from '@/lib/attendance';
 import { formatDateMx, formatTimeMx } from '@/lib/formatters';
+import { notify } from '@/lib/notify';
 import { ATTENDANCE_STATUS_OPTIONS } from '@/lib/status';
 import type { Attendance, AttendancePhoto, Employee } from '@/types/models';
 
@@ -88,9 +89,11 @@ const requestLocation = () => {
         (pos) => {
             coords.value = { lat: pos.coords.latitude, lng: pos.coords.longitude };
             locationStatus.value = 'ready';
+            notify.success('Tu ubicación fue capturada.');
         },
         () => {
             locationStatus.value = 'error';
+            notify.error('No se pudo obtener tu ubicación. Actívala en tu navegador e intenta de nuevo.');
         },
         { enableHighAccuracy: true, timeout: 10000 },
     );
@@ -146,6 +149,7 @@ const onWarningCancel = () => {
 
 const onPhotoCaptured = (file: File) => {
     showCamera.value = false;
+    notify.success('Foto capturada correctamente.');
     submit(file);
 };
 
@@ -274,6 +278,9 @@ const viewerIndex = ref<number | null>(null);
                         <p v-if="settings?.requires_location" class="flex items-center gap-1.5 text-xs text-muted-foreground">
                             <MapPin class="h-3.5 w-3.5" /> Se solicitará tu ubicación actual.
                         </p>
+                        <p v-if="canRegisterEntry || canRegisterExit" class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <Clock class="h-3.5 w-3.5" /> Se usará la hora oficial del sistema al guardar tu asistencia.
+                        </p>
                     </CardContent>
                 </Card>
 
@@ -379,9 +386,13 @@ const viewerIndex = ref<number | null>(null);
         <Dialog :open="showCamera" @update:open="showCamera = $event">
             <FormDialogContent class="max-w-md">
                 <DialogHeader>
-                    <DialogTitle>{{ pendingAction === 'entrada' ? 'Foto de entrada' : 'Foto de salida' }}</DialogTitle>
+                    <DialogTitle>Tu fotografía de asistencia</DialogTitle>
                 </DialogHeader>
-                <CameraCapture @captured="onPhotoCaptured" @cancel="onCameraCancel" />
+                <CameraCapture
+                    face-hint="Asegúrate de que tu rostro sea claramente visible en la fotografía."
+                    @captured="onPhotoCaptured"
+                    @cancel="onCameraCancel"
+                />
             </FormDialogContent>
         </Dialog>
     </div>

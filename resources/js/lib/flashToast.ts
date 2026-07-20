@@ -1,16 +1,23 @@
 import { router } from '@inertiajs/vue3';
-import { toast } from 'vue-sonner';
-import type { FlashToast } from '@/types/ui';
+import { notify } from '@/lib/notify';
 
+/**
+ * Router-wide flash handler. Antes escuchaba router.on('flash', ...), un evento que
+ * no existe en Inertia (los eventos válidos son before/start/progress/success/error/
+ * invalid/exception/finish/navigate) — por eso nunca se disparaba. 'success' sí es un
+ * evento real y trae la página ya renderizada (event.detail.page) con los props
+ * compartidos, incluido `flash`.
+ */
 export function initializeFlashToast(): void {
-    router.on('flash', (event) => {
-        const flash = (event as CustomEvent).detail?.flash;
-        const data = flash?.toast as FlashToast | undefined;
+    router.on('success', (event) => {
+        const flash = event.detail.page.props.flash as { success?: string | null; error?: string | null } | undefined;
 
-        if (!data) {
-            return;
+        if (flash?.success) {
+            notify.success(flash.success);
         }
 
-        toast[data.type](data.message);
+        if (flash?.error) {
+            notify.error(flash.error);
+        }
     });
 }

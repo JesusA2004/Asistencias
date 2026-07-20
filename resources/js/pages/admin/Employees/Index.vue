@@ -3,7 +3,6 @@ import { router, useForm } from '@inertiajs/vue3';
 import { HardHat, Pencil, Plus, Trash2, Upload, X } from '@lucide/vue';
 import type {ColumnDef} from '@tanstack/vue-table';
 import { computed, ref, watch } from 'vue';
-import { toast } from 'vue-sonner';
 import AppDataTable from '@/components/AppDataTable.vue';
 import DeleteDialog from '@/components/DeleteDialog.vue';
 import FormActions from '@/components/FormActions.vue';
@@ -140,17 +139,8 @@ const onFileChange = (e: Event) => {
 const submitImport = () => {
     importForm.post('/colaboradores/importar', {
         forceFormData: true,
-        onSuccess: (page) => {
-            const flash = (page.props.flash ?? {}) as { success?: string | null; error?: string | null };
-
-            if (flash.success) {
-toast.success(flash.success);
-}
-
-            if (flash.error) {
-toast.error(flash.error);
-}
-
+        onSuccess: () => {
+            // El toast/alerta de éxito o error ya lo dispara el handler global de flash.
             showImportModal.value = false;
             importForm.reset();
         },
