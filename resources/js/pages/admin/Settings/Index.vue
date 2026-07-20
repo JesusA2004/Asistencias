@@ -5,7 +5,6 @@ import { computed } from 'vue';
 import PageHeader from '@/components/PageHeader.vue';
 import SystemSettingsForm from '@/components/SystemSettingsForm.vue';
 import type { SettingsFormData } from '@/components/SystemSettingsForm.vue';
-import { Card, CardContent } from '@/components/ui/card';
 import type { Setting } from '@/types/models';
 
 const props = defineProps<{
@@ -47,24 +46,20 @@ const submit = () => {
 </script>
 
 <template>
-    <div class="p-6 max-w-3xl">
+    <div class="w-full max-w-6xl p-6">
         <PageHeader
             title="Configuración"
             description="Parámetros operativos del sistema: asistencia propia, captura con evidencia y revisión de fotografías."
         />
 
-        <Card>
-            <CardContent class="pt-6">
-                <SystemSettingsForm
-                    :settings-by-key="settingsByKey"
-                    :model-value="form as unknown as SettingsFormData"
-                    :errors="form.errors"
-                    :processing="form.processing"
-                    @update:model-value="onUpdate"
-                    @submit="submit"
-                />
-            </CardContent>
-        </Card>
+        <SystemSettingsForm
+            :settings-by-key="settingsByKey"
+            :model-value="form as unknown as SettingsFormData"
+            :errors="form.errors"
+            :processing="form.processing"
+            @update:model-value="onUpdate"
+            @submit="submit"
+        />
 
         <div class="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
             <Settings2 class="h-3.5 w-3.5" />

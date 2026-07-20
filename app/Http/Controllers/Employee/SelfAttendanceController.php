@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Attendance;
 use App\Models\AttendanceAudit;
 use App\Models\AttendanceEvent;
+use App\Models\AttendancePhoto;
 use App\Models\AttendanceTermsAcceptance;
 use App\Models\Employee;
 use App\Services\AttendancePhotoService;
@@ -68,9 +69,66 @@ class SelfAttendanceController extends Controller
                 'requires_location' => setting('employee_self_attendance_requires_location', false),
                 'warning_text' => setting('attendance_warning_text', ''),
                 'warning_version' => $warningVersion,
+                'photo_review_enabled' => setting('attendance_photo_review_enabled', true),
             ],
             'needsWarningAcceptance' => $needsWarningAcceptance,
+            ...$this->historyAndEvidence($employee, $request),
         ]);
+    }
+
+    /**
+     * Datos para las pestañas "Historial" y "Evidencias" de la pantalla unificada
+     * de Mi Asistencia (antes vivían en /mis-asistencias, separado de /mi-asistencia).
+     *
+     * @return array<string, mixed>
+     */
+    private function historyAndEvidence(Employee $employee, Request $request): array
+    {
+        $dateFrom = $request->date_from ?: Carbon::now()->startOfMonth()->format('Y-m-d');
+        $dateTo = $request->date_to ?: Carbon::now()->endOfMonth()->format('Y-m-d');
+        $status = $request->status;
+
+        $baseQuery = Attendance::where('employee_id', $employee->id)
+            ->whereDate('attendance_date', '>=', $dateFrom)
+            ->whereDate('attendance_date', '<=', $dateTo);
+
+        $history = (clone $baseQuery)
+            ->when($status, fn ($q, $v) => $q->where('status', $v))
+            ->with(['servicePoint:id,name'])
+            ->orderByDesc('attendance_date')
+            ->get();
+
+        $stats = (clone $baseQuery)->selectRaw('
+                COUNT(*) as total,
+                SUM(status = "presente") as present,
+                SUM(status = "falta") as absent,
+                SUM(status = "retardo") as late,
+                SUM(status IN ("descanso", "permiso", "incapacidad")) as rest
+            ')
+            ->first();
+
+        $evidence = AttendancePhoto::where('employee_id', $employee->id)
+            ->with(['attendance:id,status'])
+            ->orderByDesc('captured_at')
+            ->limit(60)
+            ->get();
+
+        return [
+            'history' => $history,
+            'historyStats' => [
+                'present' => (int) $stats->present,
+                'absent' => (int) $stats->absent,
+                'late' => (int) $stats->late,
+                'rest' => (int) $stats->rest,
+                'total' => (int) $stats->total,
+            ],
+            'historyFilters' => [
+                'date_from' => $dateFrom,
+                'date_to' => $dateTo,
+                'status' => $status,
+            ],
+            'evidence' => $evidence,
+        ];
     }
 
     private function suggestStatus(CarbonInterface $now, ?Employee $employee): string

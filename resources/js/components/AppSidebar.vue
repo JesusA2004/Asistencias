@@ -6,7 +6,6 @@ import {
     Camera,
     ClipboardList,
     Clock,
-    Eye,
     HardHat,
     History,
     Image,
@@ -43,6 +42,28 @@ const user = computed(() => page.props.auth.user as User);
 const perms = computed(() => user.value.permissions ?? []);
 const has = (p: string) => perms.value.includes(p);
 
+const roles = computed(() => user.value.roles ?? []);
+const hasRole = (role: string) => roles.value.includes(role);
+const isAdmin = computed(() => hasRole('administrador'));
+const isRh = computed(() => hasRole('rh'));
+const isSupervisor = computed(() => hasRole('supervisor'));
+const isCollaborator = computed(() => hasRole('colaborador'));
+
+// Colaborador "puro": sin ningún rol operativo/administrativo encima. Solo a estos
+// usuarios se les muestra el flujo personal de "Mi Asistencia" — un admin/RH/supervisor
+// no debe ver módulos de autorregistro solo porque también tiene ese permiso.
+const isPureCollaborator = computed(
+    () => isCollaborator.value && !isAdmin.value && !isRh.value && !isSupervisor.value,
+);
+
+const attendancePhotoReviewEnabled = computed(
+    () => page.props.settings?.attendance_photo_review_enabled ?? true,
+);
+
+const showEvidence = computed(
+    () => has('Ver evidencias de asistencia') && !isPureCollaborator.value && attendancePhotoReviewEnabled.value,
+);
+
 const navGroups = computed((): NavGroup[] => [
     {
         label: '',
@@ -65,11 +86,10 @@ const navGroups = computed((): NavGroup[] => [
     {
         label: 'Asistencias',
         items: [
-            ...(has('Registrar asistencias') ? [{ title: 'Capturar Asistencia', href: '/asistencias/capturar', icon: ClipboardList }] : []),
-            ...(has('Ver asistencias') ? [{ title: 'Gestión Asistencias', href: '/asistencias', icon: PenLine }] : []),
-            ...(has('Ver mis asistencias') ? [{ title: 'Mis Asistencias', href: '/mis-asistencias', icon: Eye }] : []),
-            ...(has('Registrar mi asistencia') ? [{ title: 'Mi Asistencia', href: '/mi-asistencia/registrar', icon: Camera }] : []),
-            ...(has('Ver evidencias de asistencia') ? [{ title: 'Evidencias de Asistencia', href: '/evidencias-asistencia', icon: Image }] : []),
+            ...(isPureCollaborator.value ? [{ title: 'Mi Asistencia', href: '/mi-asistencia', icon: Camera }] : []),
+            ...(!isPureCollaborator.value && has('Registrar asistencias') ? [{ title: 'Capturar Asistencia', href: '/asistencias/capturar', icon: ClipboardList }] : []),
+            ...(!isPureCollaborator.value && has('Ver asistencias') ? [{ title: 'Gestión Asistencias', href: '/asistencias', icon: PenLine }] : []),
+            ...(showEvidence.value ? [{ title: 'Evidencias', href: '/evidencias-asistencia', icon: Image }] : []),
         ],
     },
     {

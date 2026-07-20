@@ -62,7 +62,7 @@ class SelfAttendanceControllerTest extends TestCase
     public function test_self_attendance_page_reports_disabled_by_default(): void
     {
         $this->actingAs($this->colaborador)
-            ->get('/mi-asistencia/registrar')
+            ->get('/mi-asistencia')
             ->assertOk()
             ->assertInertia(fn ($page) => $page->where('enabled', false));
     }

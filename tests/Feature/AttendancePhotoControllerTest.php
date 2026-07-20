@@ -118,33 +118,33 @@ class AttendancePhotoControllerTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_colaborador_can_view_own_photo_when_granted_base_permission(): void
+    public function test_colaborador_can_view_own_photo(): void
     {
-        // El rol "colaborador" por defecto no incluye "Ver evidencias de asistencia" (no hay
-        // UI de evidencias para colaboradores en esta fase); esto prueba el acotamiento por
-        // employee_id de la policy en caso de que un rol futuro sí lo conceda.
-        $this->colaborador->givePermissionTo('Ver evidencias de asistencia');
-
+        // El rol "colaborador" incluye "Ver evidencias de asistencia" (base) para poder ver
+        // su propia pestaña "Evidencias" en Mi Asistencia; AttendancePhotoPolicy lo acota a
+        // employee_id propio, así que nunca ve fotos de otros colaboradores.
         $this->actingAs($this->colaborador)
             ->get("/evidencias-asistencia/{$this->photo->id}/foto")
             ->assertOk();
     }
 
-    public function test_other_colaborador_with_base_permission_cannot_view_photo(): void
+    public function test_other_colaborador_cannot_view_photo(): void
     {
         $other = User::factory()->create();
         $other->assignRole('colaborador');
-        $other->givePermissionTo('Ver evidencias de asistencia');
 
         $this->actingAs($other)
             ->get("/evidencias-asistencia/{$this->photo->id}/foto")
             ->assertForbidden();
     }
 
-    public function test_colaborador_without_permission_is_forbidden(): void
+    public function test_colaborador_gallery_index_returns_empty_scope(): void
     {
+        // Colaborador tiene el permiso base para ver sus propias fotos, pero no "ver todas"
+        // ni "ver de sus ubicaciones": si entra directo al índice de la galería, no ve nada.
         $this->actingAs($this->colaborador)
-            ->get("/evidencias-asistencia/{$this->photo->id}/foto")
-            ->assertForbidden();
+            ->get('/evidencias-asistencia')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->has('photos.data', 0));
     }
 }

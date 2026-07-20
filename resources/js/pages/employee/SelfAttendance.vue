@@ -1,18 +1,28 @@
 <script setup lang="ts">
 import { router } from '@inertiajs/vue3';
-import { Camera, CheckCircle2, LogIn, LogOut, MapPin, ShieldAlert, UserX } from '@lucide/vue';
+import { Calendar, Camera, CheckCircle2, Clock, LogIn, LogOut, MapPin, ShieldAlert, ShieldCheck, UserX, XCircle } from '@lucide/vue';
 import { computed, ref } from 'vue';
+import AttendanceEvidenceCard from '@/components/AttendanceEvidenceCard.vue';
+import AttendanceEvidenceViewer from '@/components/AttendanceEvidenceViewer.vue';
 import AttendanceWarningDialog from '@/components/AttendanceWarningDialog.vue';
 import CameraCapture from '@/components/CameraCapture.vue';
+import DatePicker from '@/components/DatePicker.vue';
 import EmployeeAttendanceStatusCard from '@/components/EmployeeAttendanceStatusCard.vue';
 import EmptyState from '@/components/EmptyState.vue';
 import FormDialogContent from '@/components/FormDialogContent.vue';
+import FormField from '@/components/FormField.vue';
+import KPICard from '@/components/KPICard.vue';
 import PageHeader from '@/components/PageHeader.vue';
+import SearchableSelect from '@/components/SearchableSelect.vue';
+import StatusBadge from '@/components/StatusBadge.vue';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { deriveCaptureState } from '@/lib/attendance';
-import type { Attendance, Employee } from '@/types/models';
+import { formatDateMx, formatTimeMx } from '@/lib/formatters';
+import { ATTENDANCE_STATUS_OPTIONS } from '@/lib/status';
+import type { Attendance, AttendancePhoto, Employee } from '@/types/models';
 
 type ActionType = 'entrada' | 'salida';
 
@@ -32,8 +42,13 @@ const props = defineProps<{
         requires_location: boolean;
         warning_text: string;
         warning_version: number;
+        photo_review_enabled: boolean;
     } | null;
     needsWarningAcceptance: boolean;
+    history?: (Attendance & { service_point?: { name: string } })[];
+    historyStats?: { present: number; absent: number; late: number; rest: number; total: number };
+    historyFilters?: { date_from?: string; date_to?: string; status?: string };
+    evidence?: AttendancePhoto[];
 }>();
 
 const state = computed(() => deriveCaptureState(props.attendance));
@@ -176,11 +191,31 @@ const submit = (file: File | null) => {
         },
     });
 };
+
+// ── Historial ────────────────────────────────────────────────────────
+const dateFrom = ref(props.historyFilters?.date_from ?? '');
+const dateTo = ref(props.historyFilters?.date_to ?? '');
+const historyStatus = ref<string | number | null>(props.historyFilters?.status ?? '');
+
+const reloadHistory = () => {
+    router.get(
+        '/mi-asistencia',
+        {
+            date_from: dateFrom.value || undefined,
+            date_to: dateTo.value || undefined,
+            status: historyStatus.value || undefined,
+        },
+        { preserveState: true, preserveScroll: true, replace: true },
+    );
+};
+
+// ── Evidencias ───────────────────────────────────────────────────────
+const viewerIndex = ref<number | null>(null);
 </script>
 
 <template>
-    <div class="mx-auto w-full max-w-2xl p-6">
-        <PageHeader title="Mi Asistencia" description="Registra tu entrada y salida del día" />
+    <div class="mx-auto w-full max-w-3xl p-6">
+        <PageHeader title="Mi Asistencia" description="Registra tu entrada/salida y consulta tu historial" />
 
         <EmptyState
             v-if="!enabled"
@@ -196,48 +231,141 @@ const submit = (file: File | null) => {
             :icon="UserX"
         />
 
-        <template v-else>
-            <EmployeeAttendanceStatusCard :employee="employee" :attendance="attendance" class="mb-6" />
+        <Tabs v-else default-value="hoy" class="w-full">
+            <TabsList>
+                <TabsTrigger value="hoy">Hoy</TabsTrigger>
+                <TabsTrigger value="historial">Historial</TabsTrigger>
+                <TabsTrigger v-if="settings?.photo_review_enabled" value="evidencias">Evidencias</TabsTrigger>
+            </TabsList>
 
-            <Card class="border-0 shadow-sm">
-                <CardContent class="flex flex-col items-center gap-4 p-8 text-center">
-                    <template v-if="canRegisterEntry">
-                        <p class="text-sm text-muted-foreground">Aún no tienes entrada registrada hoy.</p>
-                        <Button size="lg" class="h-14 w-full max-w-xs text-base" :disabled="submitting" @click="requestAction('entrada')">
-                            <LogIn class="mr-2 h-5 w-5" /> Registrar entrada
-                        </Button>
-                    </template>
+            <!-- ── Hoy ──────────────────────────────────────────────── -->
+            <TabsContent value="hoy" class="space-y-6">
+                <EmployeeAttendanceStatusCard :employee="employee" :attendance="attendance" />
 
-                    <template v-else-if="canRegisterExit">
-                        <p class="text-sm text-muted-foreground">Tu entrada ya fue registrada. Cuando termines tu jornada, registra tu salida.</p>
-                        <Button size="lg" class="h-14 w-full max-w-xs text-base" :disabled="submitting" @click="requestAction('salida')">
-                            <LogOut class="mr-2 h-5 w-5" /> Registrar salida
-                        </Button>
-                    </template>
+                <Card class="border-0 shadow-sm">
+                    <CardContent class="flex flex-col items-center gap-4 p-8 text-center">
+                        <template v-if="canRegisterEntry">
+                            <p class="text-sm text-muted-foreground">Aún no tienes entrada registrada hoy.</p>
+                            <Button size="lg" class="h-14 w-full max-w-xs text-base" :disabled="submitting" @click="requestAction('entrada')">
+                                <LogIn class="mr-2 h-5 w-5" /> Registrar entrada
+                            </Button>
+                        </template>
 
-                    <template v-else-if="isComplete">
-                        <CheckCircle2 class="h-10 w-10 text-green-600 dark:text-green-400" />
-                        <p class="font-medium">Tu asistencia de hoy ya está completa.</p>
-                    </template>
+                        <template v-else-if="canRegisterExit">
+                            <p class="text-sm text-muted-foreground">Tu entrada ya fue registrada. Cuando termines tu jornada, registra tu salida.</p>
+                            <Button size="lg" class="h-14 w-full max-w-xs text-base" :disabled="submitting" @click="requestAction('salida')">
+                                <LogOut class="mr-2 h-5 w-5" /> Registrar salida
+                            </Button>
+                        </template>
 
-                    <template v-else-if="isTerminalOther">
-                        <p class="font-medium">Ya tienes un registro de asistencia para hoy.</p>
-                        <p class="text-sm text-muted-foreground">No es necesario registrar entrada.</p>
-                    </template>
+                        <template v-else-if="isComplete">
+                            <CheckCircle2 class="h-10 w-10 text-green-600 dark:text-green-400" />
+                            <p class="font-medium">Tu asistencia de hoy ya está completa.</p>
+                        </template>
 
-                    <p v-if="settings?.requires_photo" class="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Camera class="h-3.5 w-3.5" /> Se te pedirá tomar una fotografía con la cámara.
-                    </p>
-                    <p v-if="settings?.requires_location" class="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <MapPin class="h-3.5 w-3.5" /> Se solicitará tu ubicación actual.
-                    </p>
-                </CardContent>
-            </Card>
+                        <template v-else-if="isTerminalOther">
+                            <p class="font-medium">Ya tienes un registro de asistencia para hoy.</p>
+                            <p class="text-sm text-muted-foreground">No es necesario registrar entrada.</p>
+                        </template>
 
-            <p class="mt-4 text-center text-xs text-muted-foreground">
-                Las evidencias fotográficas solo son visibles para personal autorizado.
-            </p>
-        </template>
+                        <p v-if="settings?.requires_photo" class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <Camera class="h-3.5 w-3.5" /> Se te pedirá tomar una fotografía con la cámara.
+                        </p>
+                        <p v-if="settings?.requires_location" class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <MapPin class="h-3.5 w-3.5" /> Se solicitará tu ubicación actual.
+                        </p>
+                    </CardContent>
+                </Card>
+
+                <p class="text-center text-xs text-muted-foreground">
+                    Las evidencias fotográficas solo son visibles para personal autorizado.
+                </p>
+            </TabsContent>
+
+            <!-- ── Historial ────────────────────────────────────────── -->
+            <TabsContent value="historial" class="space-y-6">
+                <div v-if="historyStats" class="grid grid-cols-2 gap-3 md:grid-cols-5">
+                    <KPICard title="Presentes" :value="historyStats.present" :icon="CheckCircle2" color="green" />
+                    <KPICard title="Faltas" :value="historyStats.absent" :icon="XCircle" color="red" />
+                    <KPICard title="Retardos" :value="historyStats.late" :icon="Clock" color="purple" />
+                    <KPICard title="Descanso/Permiso" :value="historyStats.rest" :icon="Calendar" color="blue" />
+                    <KPICard title="Total" :value="historyStats.total" :icon="Calendar" color="orange" />
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 rounded-xl border bg-muted/30 p-4 md:grid-cols-3">
+                    <FormField label="Desde">
+                        <DatePicker v-model="dateFrom" placeholder="Fecha inicial" @update:model-value="reloadHistory" />
+                    </FormField>
+                    <FormField label="Hasta">
+                        <DatePicker v-model="dateTo" placeholder="Fecha final" @update:model-value="reloadHistory" />
+                    </FormField>
+                    <SearchableSelect
+                        v-model="historyStatus"
+                        :options="ATTENDANCE_STATUS_OPTIONS"
+                        label="Estado"
+                        placeholder="Todos"
+                        @update:model-value="reloadHistory"
+                    />
+                </div>
+
+                <Card class="border-0 shadow-sm">
+                    <CardContent class="p-0">
+                        <EmptyState
+                            v-if="!history?.length"
+                            title="Sin registros"
+                            description="No hay asistencias registradas para el rango de fechas y filtros seleccionados."
+                            :icon="Calendar"
+                        />
+                        <div v-else class="divide-y">
+                            <div
+                                v-for="a in history"
+                                :key="a.id"
+                                class="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between"
+                            >
+                                <div>
+                                    <p class="text-sm font-medium">{{ formatDateMx(a.attendance_date) }}</p>
+                                    <p class="text-xs text-muted-foreground">{{ a.service_point?.name ?? '—' }}</p>
+                                </div>
+                                <div class="flex flex-wrap items-center gap-4">
+                                    <p class="font-mono text-xs">{{ formatTimeMx(a.entry_time) }} – {{ formatTimeMx(a.exit_time) }}</p>
+                                    <StatusBadge :status="a.status" />
+                                </div>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+            </TabsContent>
+
+            <!-- ── Evidencias ───────────────────────────────────────── -->
+            <TabsContent v-if="settings?.photo_review_enabled" value="evidencias" class="space-y-4">
+                <EmptyState
+                    v-if="!evidence?.length"
+                    title="Sin evidencias"
+                    description="Aún no tienes fotografías de evidencia registradas."
+                    :icon="Camera"
+                />
+                <div v-else class="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                    <AttendanceEvidenceCard
+                        v-for="(photo, index) in evidence"
+                        :key="photo.id"
+                        :photo="photo"
+                        @click="viewerIndex = index"
+                    />
+                </div>
+
+                <AttendanceEvidenceViewer
+                    :photos="evidence ?? []"
+                    :current-index="viewerIndex"
+                    @update:current-index="viewerIndex = $event"
+                    @close="viewerIndex = null"
+                />
+
+                <p class="flex items-center gap-2 text-xs text-muted-foreground">
+                    <ShieldCheck class="h-3.5 w-3.5" />
+                    Las evidencias fotográficas solo son visibles para personal autorizado.
+                </p>
+            </TabsContent>
+        </Tabs>
 
         <AttendanceWarningDialog
             v-if="settings"

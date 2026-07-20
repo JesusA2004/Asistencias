@@ -103,7 +103,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     Route::middleware('permission:Registrar mi asistencia')->group(function () {
-        Route::get('/mi-asistencia/registrar', [SelfAttendanceController::class, 'index'])->name('mi-asistencia.index');
+        Route::get('/mi-asistencia', [SelfAttendanceController::class, 'index'])->name('mi-asistencia.index');
         Route::post('/mi-asistencia/entrada', [SelfAttendanceController::class, 'storeEntry'])->name('mi-asistencia.entrada');
         Route::post('/mi-asistencia/salida', [SelfAttendanceController::class, 'storeExit'])->name('mi-asistencia.salida');
     });

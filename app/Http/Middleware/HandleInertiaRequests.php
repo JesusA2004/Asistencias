@@ -33,6 +33,9 @@ class HandleInertiaRequests extends Middleware
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),
             ],
+            'settings' => $user ? [
+                'attendance_photo_review_enabled' => setting('attendance_photo_review_enabled', true),
+            ] : null,
         ];
     }
 }

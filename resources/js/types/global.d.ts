@@ -19,6 +19,7 @@ declare module '@inertiajs/core' {
             name: string;
             auth: Auth;
             sidebarOpen: boolean;
+            settings: { attendance_photo_review_enabled: boolean } | null;
             [key: string]: unknown;
         };
     }

@@ -71,6 +71,10 @@ class RolesAndPermissionsSeeder extends Seeder
             'Ver mis asistencias',
             'Ver dashboard',
             'Registrar mi asistencia',
+            // Solo para poder ver sus propias fotos de evidencia (AttendancePhotoPolicy las
+            // acota a employee_id propio); no se le da "ver de sus ubicaciones" ni "ver todas",
+            // así que el índice de la galería de evidencias le queda vacío si llega a entrar.
+            'Ver evidencias de asistencia',
         ]);
 
         $rh->syncPermissions([

@@ -120,11 +120,16 @@ class AttendanceEvidenceControllerTest extends TestCase
                 ->where('photos.data.0.id', $this->photoClientA->id));
     }
 
-    public function test_colaborador_cannot_access_evidence_index(): void
+    public function test_colaborador_sees_empty_scope_on_evidence_index(): void
     {
+        // Colaborador tiene el permiso base "Ver evidencias de asistencia" (solo para poder
+        // ver sus propias fotos vía la pestaña "Evidencias" de Mi Asistencia), pero no "ver
+        // todas" ni "ver de sus ubicaciones", así que el índice de la galería general no le
+        // muestra nada si llega a entrar directamente.
         $this->actingAs($this->colaborador)
             ->get('/evidencias-asistencia')
-            ->assertForbidden();
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->has('photos.data', 0));
     }
 
     public function test_filter_by_client_narrows_results(): void
