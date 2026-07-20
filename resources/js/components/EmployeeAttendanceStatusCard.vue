@@ -4,7 +4,7 @@ import { computed } from 'vue';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { captureStateVisual, deriveCaptureState } from '@/lib/attendance';
-import { formatDateMx, formatTimeMx } from '@/lib/formatters';
+import { formatDateMx, formatTimeMx, todayLocalYmd } from '@/lib/formatters';
 import type { Attendance, Employee } from '@/types/models';
 
 const props = defineProps<{
@@ -16,7 +16,7 @@ const props = defineProps<{
     attendance: Attendance | null;
 }>();
 
-const today = new Date().toISOString().split('T')[0];
+const today = todayLocalYmd();
 const state = computed(() => deriveCaptureState(props.attendance));
 const visual = computed(() => captureStateVisual(state.value));
 </script>

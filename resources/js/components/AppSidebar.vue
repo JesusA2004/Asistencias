@@ -8,10 +8,8 @@ import {
     Clock,
     HardHat,
     History,
-    Image,
     LayoutDashboard,
     MapPin,
-    PenLine,
     Settings,
     Shield,
     UserCheck,
@@ -35,8 +33,14 @@ import { useCurrentUrl } from '@/composables/useCurrentUrl';
 import type { NavGroup } from '@/types';
 import type { User } from '@/types';
 
+type NavHref = NavGroup['items'][number]['href'];
+
 const page = usePage();
-const { isCurrentUrl } = useCurrentUrl();
+const { isCurrentUrl, isCurrentOrParentUrl } = useCurrentUrl();
+
+// El hub de Asistencias vive en /asistencias/{capturar,gestion,evidencias} pero el
+// sidebar solo enlaza a /asistencias — hay que resaltarlo también en sus sub-rutas.
+const isNavItemActive = (href: NavHref) => (href === '/asistencias' ? isCurrentOrParentUrl(href) : isCurrentUrl(href));
 
 const user = computed(() => page.props.auth.user as User);
 const perms = computed(() => user.value.permissions ?? []);
@@ -87,9 +91,12 @@ const navGroups = computed((): NavGroup[] => [
         label: 'Asistencias',
         items: [
             ...(isPureCollaborator.value ? [{ title: 'Mi Asistencia', href: '/mi-asistencia', icon: Camera }] : []),
-            ...(!isPureCollaborator.value && has('Registrar asistencias') ? [{ title: 'Capturar Asistencia', href: '/asistencias/capturar', icon: ClipboardList }] : []),
-            ...(!isPureCollaborator.value && has('Ver asistencias') ? [{ title: 'Gestión Asistencias', href: '/asistencias', icon: PenLine }] : []),
-            ...(showEvidence.value ? [{ title: 'Evidencias', href: '/evidencias-asistencia', icon: Image }] : []),
+            // Capturar/Gestión/Evidencias viven bajo un solo hub con tabs (/asistencias) —
+            // un único ítem evita que el sidebar muestre 3 entradas para lo que es una
+            // sola sección. El hub redirige al primer tab al que el usuario tenga acceso.
+            ...(!isPureCollaborator.value && (has('Registrar asistencias') || has('Ver asistencias') || showEvidence.value)
+                ? [{ title: 'Asistencias', href: '/asistencias', icon: ClipboardList }]
+                : []),
         ],
     },
     {
@@ -135,7 +142,7 @@ const visibleGroups = computed(() => navGroups.value.filter((g) => g.items.lengt
                     <SidebarMenuItem v-for="item in group.items" :key="item.title">
                         <SidebarMenuButton
                             as-child
-                            :is-active="isCurrentUrl(item.href)"
+                            :is-active="isNavItemActive(item.href)"
                             :tooltip="item.title"
                         >
                             <Link :href="item.href">

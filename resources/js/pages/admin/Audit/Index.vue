@@ -135,7 +135,7 @@ const changeSummary = (audit: AttendanceAudit): string => {
         <PageHeader title="Auditoría" description="Registro de todas las acciones realizadas sobre asistencias" />
 
         <!-- Filters -->
-        <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6 bg-muted/30 p-4 rounded-lg border">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-5 mb-6 bg-muted/30 p-4 rounded-lg border">
             <SearchableSelect v-model="filterAction" :options="actionOptions" label="Acción" placeholder="Todas" />
             <SearchableSelect v-model="filterChangedBy" :options="userOptions" label="Usuario" placeholder="Todos" />
             <FormField label="Desde">

@@ -229,7 +229,7 @@ const columns: ColumnDef<Employee>[] = [
 
 <template>
     <div class="p-6">
-        <PageHeader title="Colaboradores" description="Gestión del personal de seguridad activo">
+        <PageHeader title="Colaboradores" description="Administra el personal operativo: datos, empresa, punto y turno asignado.">
             <template #actions>
                 <Button v-if="hasPermission('Importar colaboradores')" variant="outline" @click="openImport">
                     <Upload class="h-4 w-4 mr-2" /> Importar colaboradores

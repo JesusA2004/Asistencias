@@ -128,7 +128,7 @@ const columns: ColumnDef<UserWithRoles>[] = [
 
 <template>
     <div class="p-6">
-        <PageHeader title="Usuarios" description="Administración de cuentas de usuario">
+        <PageHeader title="Usuarios" description="Administra cuentas y permisos de acceso al sistema.">
             <template #actions>
                 <Button v-if="hasPermission('Crear usuarios')" @click="openCreate">
                     <Plus class="h-4 w-4 mr-2" /> Nuevo Usuario

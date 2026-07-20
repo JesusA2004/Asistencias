@@ -96,7 +96,7 @@ const columns: ColumnDef<Client>[] = [
 
 <template>
     <div class="p-6">
-        <PageHeader title="Empresas / Clientes" description="Gestión de clientes y empresas de seguridad">
+        <PageHeader title="Empresas / Clientes" description="Empresas o clientes donde tus colaboradores prestan servicio.">
             <template #actions>
                 <Button v-if="hasPermission('Crear empresas')" @click="openCreate">
                     <Plus class="h-4 w-4 mr-2" /> Nueva Empresa

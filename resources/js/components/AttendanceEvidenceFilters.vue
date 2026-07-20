@@ -73,7 +73,7 @@ const statusOptions = [
 
 <template>
     <div class="mb-6 space-y-3 rounded-lg border bg-muted/30 p-4">
-        <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
             <FormField label="Desde">
                 <DatePicker :model-value="dateFrom" placeholder="Fecha inicial" @update:model-value="emit('update:dateFrom', $event ?? '')" />
             </FormField>

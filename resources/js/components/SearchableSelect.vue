@@ -56,11 +56,14 @@ const selected = computed(() => props.options.find((o) => String(o.value) === St
 
 const filteredOptions = computed(() => {
     const q = query.value.trim().toLowerCase();
+
     if (!q) {
         return props.options;
     }
+
     return props.options.filter((o) => {
         const haystack = `${o.label} ${o.description ?? ''}`.toLowerCase();
+
         return haystack.includes(q);
     });
 });

@@ -123,7 +123,7 @@ const SYSTEM_ROLES = ['administrador', 'supervisor', 'colaborador', 'rh'];
 
 <template>
     <div class="p-6">
-        <PageHeader title="Roles y Permisos" description="Controla el acceso de cada tipo de usuario">
+        <PageHeader title="Roles y Permisos" description="Define qué permisos tiene cada perfil de usuario.">
             <template #actions>
                 <Button v-if="hasPermission('Crear roles y permisos')" @click="openCreate">
                     <Plus class="h-4 w-4 mr-2" /> Nuevo Rol

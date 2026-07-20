@@ -50,6 +50,9 @@ const patch = <K extends keyof SettingsFormData>(key: K, value: SettingsFormData
                     </CardTitle>
                 </CardHeader>
                 <CardContent class="space-y-2">
+                    <p class="px-1 pb-1 text-xs text-muted-foreground">
+                        Estas opciones aplican al módulo Mi Asistencia del colaborador.
+                    </p>
                     <SettingsToggleCard
                         title="Permitir asistencia propia del colaborador"
                         :description="desc('allow_employee_self_attendance')"
@@ -60,18 +63,24 @@ const patch = <K extends keyof SettingsFormData>(key: K, value: SettingsFormData
                         title="Exigir foto obligatoria en asistencia propia"
                         :description="desc('employee_self_attendance_requires_photo')"
                         :model-value="modelValue.employee_self_attendance_requires_photo"
+                        :disabled="!modelValue.allow_employee_self_attendance"
+                        :tooltip="!modelValue.allow_employee_self_attendance ? 'Activa primero la asistencia propia del colaborador.' : undefined"
                         @update:model-value="patch('employee_self_attendance_requires_photo', $event)"
                     />
                     <SettingsToggleCard
                         title="Permitir registrar salida"
                         :description="desc('employee_self_attendance_allow_exit')"
                         :model-value="modelValue.employee_self_attendance_allow_exit"
+                        :disabled="!modelValue.allow_employee_self_attendance"
+                        :tooltip="!modelValue.allow_employee_self_attendance ? 'Activa primero la asistencia propia del colaborador.' : undefined"
                         @update:model-value="patch('employee_self_attendance_allow_exit', $event)"
                     />
                     <SettingsToggleCard
                         title="Solicitar ubicación del dispositivo"
                         :description="desc('employee_self_attendance_requires_location')"
                         :model-value="modelValue.employee_self_attendance_requires_location"
+                        :disabled="!modelValue.allow_employee_self_attendance"
+                        :tooltip="!modelValue.allow_employee_self_attendance ? 'Activa primero la asistencia propia del colaborador.' : undefined"
                         @update:model-value="patch('employee_self_attendance_requires_location', $event)"
                     />
                 </CardContent>
@@ -84,6 +93,9 @@ const patch = <K extends keyof SettingsFormData>(key: K, value: SettingsFormData
                     </CardTitle>
                 </CardHeader>
                 <CardContent class="space-y-2">
+                    <p class="px-1 pb-1 text-xs text-muted-foreground">
+                        Estas opciones aplican al módulo Capturar Asistencia.
+                    </p>
                     <SettingsToggleCard
                         title="Exigir foto al capturar asistencia"
                         :description="desc('supervisor_capture_requires_photo')"
@@ -111,6 +123,9 @@ const patch = <K extends keyof SettingsFormData>(key: K, value: SettingsFormData
                     </CardTitle>
                 </CardHeader>
                 <CardContent class="space-y-3">
+                    <p class="px-1 text-xs text-muted-foreground">
+                        Controla la galería de evidencias y la retención de fotografías.
+                    </p>
                     <SettingsToggleCard
                         title="Habilitar visualizador de evidencias"
                         :description="desc('attendance_photo_review_enabled')"

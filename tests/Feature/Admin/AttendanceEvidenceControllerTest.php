@@ -97,7 +97,7 @@ class AttendanceEvidenceControllerTest extends TestCase
     public function test_admin_sees_all_evidences(): void
     {
         $this->actingAs($this->admin)
-            ->get('/evidencias-asistencia')
+            ->get('/asistencias/evidencias')
             ->assertOk()
             ->assertInertia(fn ($page) => $page->has('photos.data', 2));
     }
@@ -105,7 +105,7 @@ class AttendanceEvidenceControllerTest extends TestCase
     public function test_rh_sees_all_evidences(): void
     {
         $this->actingAs($this->rh)
-            ->get('/evidencias-asistencia')
+            ->get('/asistencias/evidencias')
             ->assertOk()
             ->assertInertia(fn ($page) => $page->has('photos.data', 2));
     }
@@ -113,7 +113,7 @@ class AttendanceEvidenceControllerTest extends TestCase
     public function test_supervisor_sees_only_assigned_client_evidences(): void
     {
         $this->actingAs($this->supervisorA)
-            ->get('/evidencias-asistencia')
+            ->get('/asistencias/evidencias')
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->has('photos.data', 1)
@@ -127,7 +127,7 @@ class AttendanceEvidenceControllerTest extends TestCase
         // todas" ni "ver de sus ubicaciones", así que el índice de la galería general no le
         // muestra nada si llega a entrar directamente.
         $this->actingAs($this->colaborador)
-            ->get('/evidencias-asistencia')
+            ->get('/asistencias/evidencias')
             ->assertOk()
             ->assertInertia(fn ($page) => $page->has('photos.data', 0));
     }
@@ -135,7 +135,7 @@ class AttendanceEvidenceControllerTest extends TestCase
     public function test_filter_by_client_narrows_results(): void
     {
         $this->actingAs($this->admin)
-            ->get('/evidencias-asistencia?client_id='.$this->clientB->id)
+            ->get('/asistencias/evidencias?client_id='.$this->clientB->id)
             ->assertInertia(fn ($page) => $page
                 ->has('photos.data', 1)
                 ->where('photos.data.0.id', $this->photoClientB->id));
@@ -144,7 +144,7 @@ class AttendanceEvidenceControllerTest extends TestCase
     public function test_filter_by_search_narrows_results(): void
     {
         $this->actingAs($this->admin)
-            ->get('/evidencias-asistencia?search=Beto')
+            ->get('/asistencias/evidencias?search=Beto')
             ->assertInertia(fn ($page) => $page
                 ->has('photos.data', 1)
                 ->where('photos.data.0.id', $this->photoClientB->id));

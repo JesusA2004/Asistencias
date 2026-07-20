@@ -143,7 +143,7 @@ class AttendancePhotoControllerTest extends TestCase
         // Colaborador tiene el permiso base para ver sus propias fotos, pero no "ver todas"
         // ni "ver de sus ubicaciones": si entra directo al índice de la galería, no ve nada.
         $this->actingAs($this->colaborador)
-            ->get('/evidencias-asistencia')
+            ->get('/asistencias/evidencias')
             ->assertOk()
             ->assertInertia(fn ($page) => $page->has('photos.data', 0));
     }

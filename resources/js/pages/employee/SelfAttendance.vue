@@ -12,6 +12,7 @@ import EmptyState from '@/components/EmptyState.vue';
 import FormDialogContent from '@/components/FormDialogContent.vue';
 import FormField from '@/components/FormField.vue';
 import KPICard from '@/components/KPICard.vue';
+import ModuleInfoCard from '@/components/ModuleInfoCard.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import SearchableSelect from '@/components/SearchableSelect.vue';
 import StatusBadge from '@/components/StatusBadge.vue';
@@ -235,7 +236,15 @@ const viewerIndex = ref<number | null>(null);
             :icon="UserX"
         />
 
-        <Tabs v-else default-value="hoy" class="w-full">
+        <template v-else>
+            <ModuleInfoCard
+                storage-key="mi-asistencia"
+                what-is-it="Registra tu propia entrada/salida y consulta tu historial."
+                when-to-use="Cada día que trabajes: al llegar para marcar tu entrada, y al terminar tu turno para marcar tu salida."
+                :steps="['Entra a la pestaña Hoy y revisa tu estado del día.', 'Registra tu entrada (toma foto si el sistema lo pide).', 'Al terminar tu turno, registra tu salida.', 'Consulta tu historial o tus evidencias en las otras pestañas.']"
+            />
+
+        <Tabs default-value="hoy" class="w-full">
             <TabsList>
                 <TabsTrigger value="hoy">Hoy</TabsTrigger>
                 <TabsTrigger value="historial">Historial</TabsTrigger>
@@ -299,7 +308,7 @@ const viewerIndex = ref<number | null>(null);
                     <KPICard title="Total" :value="historyStats.total" :icon="Calendar" color="orange" />
                 </div>
 
-                <div class="grid grid-cols-2 gap-3 rounded-xl border bg-muted/30 p-4 md:grid-cols-3">
+                <div class="grid grid-cols-1 gap-3 rounded-xl border bg-muted/30 p-4 sm:grid-cols-2 md:grid-cols-3">
                     <FormField label="Desde">
                         <DatePicker v-model="dateFrom" placeholder="Fecha inicial" @update:model-value="reloadHistory" />
                     </FormField>
@@ -373,6 +382,7 @@ const viewerIndex = ref<number | null>(null);
                 </p>
             </TabsContent>
         </Tabs>
+        </template>
 
         <AttendanceWarningDialog
             v-if="settings"

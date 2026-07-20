@@ -5,6 +5,8 @@ import { computed, ref, watch } from 'vue';
 import AttendanceEvidenceFilters from '@/components/AttendanceEvidenceFilters.vue';
 import AttendanceEvidenceGallery from '@/components/AttendanceEvidenceGallery.vue';
 import AttendanceEvidenceViewer from '@/components/AttendanceEvidenceViewer.vue';
+import AttendanceHubTabs from '@/components/AttendanceHubTabs.vue';
+import ModuleInfoCard from '@/components/ModuleInfoCard.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import type { AttendancePhoto, Client, PaginatedData, ServicePoint } from '@/types/models';
 
@@ -48,7 +50,7 @@ const hasActiveFilters = computed(
 
 const applyFilters = () => {
     router.get(
-        '/evidencias-asistencia',
+        '/asistencias/evidencias',
         {
             date_from: dateFrom.value || undefined,
             date_to: dateTo.value || undefined,
@@ -82,17 +84,25 @@ const clearFilters = () => {
     captureOrigin.value = '';
     status.value = '';
     search.value = '';
-    router.get('/evidencias-asistencia', {}, { preserveState: true, replace: true });
+    router.get('/asistencias/evidencias', {}, { preserveState: true, replace: true });
 };
 
 const onPage = (page: number) => {
-    router.get('/evidencias-asistencia', { ...props.filters, page }, { preserveState: true });
+    router.get('/asistencias/evidencias', { ...props.filters, page }, { preserveState: true });
 };
 </script>
 
 <template>
     <div class="p-6">
         <PageHeader title="Evidencias de Asistencia" description="Revisión rápida de fotografías capturadas en el registro de asistencia" />
+        <AttendanceHubTabs />
+
+        <ModuleInfoCard
+            storage-key="evidencias-asistencia"
+            what-is-it="Revisa fotografías de asistencia capturadas por colaboradores o supervisores."
+            when-to-use="Cuando necesites verificar que una asistencia sí cuenta con evidencia fotográfica válida."
+            :steps="['Filtra por empresa, punto de servicio, fecha o supervisor.', 'Busca la fotografía que necesitas revisar.', 'Ábrela para verla en grande y navega entre fotos con las flechas.']"
+        />
 
         <AttendanceEvidenceFilters
             v-model:date-from="dateFrom"

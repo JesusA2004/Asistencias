@@ -250,7 +250,7 @@ const columns: ColumnDef<Attendance>[] = [
 
 <template>
     <div class="p-6">
-        <PageHeader title="Reportes de Asistencia" description="Filtra y exporta reportes por rango de fechas">
+        <PageHeader title="Reportes de Asistencia" description="Analiza y exporta reportes de asistencia por rango de fechas.">
             <template #actions>
                 <template v-if="hasPermission('Exportar reportes') && hasValidRange">
                     <Button variant="outline" as="a" :href="`/reportes/excel?${exportParams()}`" title="Recomendado para reportes grandes">
@@ -277,7 +277,7 @@ const columns: ColumnDef<Attendance>[] = [
                 <ChevronDown :class="['h-4 w-4 transition-transform', filtersOpen ? 'rotate-180' : '']" />
             </CollapsibleTrigger>
             <CollapsibleContent class="mt-3 space-y-3">
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
                 <FormField label="Desde" required>
                     <DatePicker v-model="dateFrom" placeholder="Fecha inicial" />
                 </FormField>
@@ -287,7 +287,7 @@ const columns: ColumnDef<Attendance>[] = [
                 <SearchableSelect v-model="clientId" :options="clientOptions" label="Empresa" placeholder="Todas" />
                 <SearchableSelect v-model="spId" :options="servicePointOptions" label="Punto de servicio" placeholder="Todos" />
             </div>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
                 <SearchableSelect v-model="employeeId" :options="employeeOptions" label="Colaborador" placeholder="Todos" />
                 <SearchableSelect v-model="supervisorId" :options="supervisorOptions" label="Supervisor" placeholder="Todos" />
                 <SearchableSelect v-model="shiftId" :options="shiftOptions" label="Turno" placeholder="Todos" />

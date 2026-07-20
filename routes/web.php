@@ -15,7 +15,6 @@ use App\Http\Controllers\Admin\SystemSettingController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\AttendancePhotoController;
 use App\Http\Controllers\AttendanceWarningAcceptanceController;
-use App\Http\Controllers\Employee\MyAttendanceController;
 use App\Http\Controllers\Employee\SelfAttendanceController;
 use App\Http\Controllers\Supervisor\AttendanceCaptureController;
 use Illuminate\Support\Facades\Route;
@@ -93,14 +92,34 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     Route::middleware('permission:Ver asistencias')->group(function () {
-        Route::get('/asistencias', [AttendanceController::class, 'index'])->name('asistencias.index');
+        Route::get('/asistencias/gestion', [AttendanceController::class, 'index'])->name('asistencias.index');
         Route::patch('/asistencias/{attendance}/corregir', [AttendanceController::class, 'correct'])->name('asistencias.corregir');
         Route::delete('/asistencias/{attendance}', [AttendanceController::class, 'destroy'])->name('asistencias.destroy');
     });
 
-    Route::middleware('permission:Ver mis asistencias')->group(function () {
-        Route::get('/mis-asistencias', [MyAttendanceController::class, 'index'])->name('mis-asistencias.index');
-    });
+    // Hub: /asistencias no es una página en sí — redirige al primer tab al que el
+    // usuario tenga acceso (Gestión > Capturar > Evidencias), para que los enlaces
+    // viejos a "/asistencias" (antes la Gestión) y el ítem único del sidebar sigan
+    // funcionando sin que cada rol tenga que memorizar una sub-ruta distinta.
+    Route::get('/asistencias', function () {
+        $user = auth()->user();
+
+        if ($user->can('Ver asistencias')) {
+            return redirect('/asistencias/gestion');
+        }
+
+        if ($user->can('Registrar asistencias')) {
+            return redirect('/asistencias/capturar');
+        }
+
+        if ($user->can('Ver evidencias de asistencia')) {
+            return redirect('/asistencias/evidencias');
+        }
+
+        abort(403);
+    })->name('asistencias.hub');
+
+    Route::redirect('/mis-asistencias', '/mi-asistencia')->name('mis-asistencias.index');
 
     Route::middleware('permission:Registrar mi asistencia')->group(function () {
         Route::get('/mi-asistencia', [SelfAttendanceController::class, 'index'])->name('mi-asistencia.index');
@@ -134,10 +153,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // ── Evidencias de Asistencia ────────────────────────────────────────
     Route::middleware('permission:Ver evidencias de asistencia')->group(function () {
-        Route::get('/evidencias-asistencia', [AttendanceEvidenceController::class, 'index'])->name('evidencias.index');
+        Route::get('/asistencias/evidencias', [AttendanceEvidenceController::class, 'index'])->name('evidencias.index');
         Route::get('/evidencias-asistencia/{photo}/foto', [AttendancePhotoController::class, 'show'])->name('evidencias.foto');
         Route::get('/evidencias-asistencia/{photo}/miniatura', [AttendancePhotoController::class, 'thumbnail'])->name('evidencias.miniatura');
     });
+
+    Route::redirect('/evidencias-asistencia', '/asistencias/evidencias');
 
     // Aceptación del aviso de evidencia fotográfica: cualquier autenticado que llegue a un flujo con cámara.
     Route::post('/asistencias/aceptar-aviso', [AttendanceWarningAcceptanceController::class, 'store'])->name('asistencias.aceptar-aviso');

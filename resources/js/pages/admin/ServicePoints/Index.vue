@@ -114,7 +114,7 @@ const columns: ColumnDef<ServicePointRow>[] = [
 
 <template>
     <div class="p-6">
-        <PageHeader title="Puntos de Servicio" description="Ubicaciones donde operan los colaboradores">
+        <PageHeader title="Puntos de Servicio" description="Ubicaciones físicas de trabajo donde operan los colaboradores.">
             <template #actions>
                 <Button v-if="hasPermission('Crear puntos de servicio')" @click="openCreate">
                     <Plus class="h-4 w-4 mr-2" /> Nuevo Punto

@@ -11,16 +11,21 @@ import type {EntryRecord} from '@/components/AttendanceEntryPanel.vue';
 import AttendanceExitPanel from '@/components/AttendanceExitPanel.vue';
 import type {ExitRecord} from '@/components/AttendanceExitPanel.vue';
 import AttendanceGuidedEmptyState from '@/components/AttendanceGuidedEmptyState.vue';
+import AttendanceHubTabs from '@/components/AttendanceHubTabs.vue';
 import AttendanceIncidentPanel from '@/components/AttendanceIncidentPanel.vue';
 import AttendanceManualPanel from '@/components/AttendanceManualPanel.vue';
 import type {ManualRecord} from '@/components/AttendanceManualPanel.vue';
+import AttendancePhotoQueue from '@/components/AttendancePhotoQueue.vue';
 import AttendanceProgressSummary from '@/components/AttendanceProgressSummary.vue';
 import AttendanceSummaryBar from '@/components/AttendanceSummaryBar.vue';
 import AttendanceWarningDialog from '@/components/AttendanceWarningDialog.vue';
+import ModuleInfoCard from '@/components/ModuleInfoCard.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { useInertiaLoading } from '@/composables/useInertiaLoading';
 import { deriveCaptureState, nowTime, suggestEntryStatus } from '@/lib/attendance';
+import { todayLocalYmd } from '@/lib/formatters';
 import { notify } from '@/lib/notify';
 import type { Attendance, AttendanceStatus, Client, Employee, ServicePoint, Shift } from '@/types/models';
 
@@ -45,7 +50,7 @@ const props = defineProps<{
 
 const { isLoading } = useInertiaLoading();
 
-const today = new Date().toISOString().split('T')[0];
+const today = todayLocalYmd();
 const selectedClient = ref(props.filters.client_id ?? '');
 const selectedSP = ref(props.filters.service_point_id ?? '');
 const selectedDate = ref(props.filters.date ?? today);
@@ -62,6 +67,7 @@ const manualReason = ref('');
 const saving = ref(false);
 const photos = ref<Record<number, File | null>>({});
 const warningAccepted = ref(false);
+const photoQueueOpen = ref(false);
 
 const photosRequired = computed(() => props.settings.requires_photo);
 
@@ -261,6 +267,12 @@ const incidentRequiresNotes = computed(() => incidentStatus.value === 'permiso' 
 
 const photosCapturedCount = computed(() => selectedEmployeeIds.value.filter((id) => !!photos.value[id]).length);
 
+const photoQueueEmployees = computed(() => selectedEmployeeIds.value.map((id) => {
+    const e = employeesById.value.get(id);
+
+    return { id, name: e ? `${e.name} ${e.last_name}` : `Colaborador ${id}` };
+}));
+
 const missingRequiredPhotos = computed(() => {
     if (!photosRequired.value) {
         return false;
@@ -391,7 +403,15 @@ const onDateChange = (value: string | null) => {
 };
 
 const submit = () => {
+    if (!selectedEmployeeIds.value.length) {
+        notify.error('Selecciona al menos un colaborador para continuar.');
+
+        return;
+    }
+
     if (!canSubmit.value || !action.value) {
+        notify.error(disabledReason.value ?? 'Completa los datos requeridos antes de guardar.');
+
         return;
     }
 
@@ -471,6 +491,14 @@ const noClientsMessage = computed(() =>
 <template>
     <div class="w-full p-6">
         <PageHeader title="Capturar Asistencia" description="Registra la asistencia diaria de tus colaboradores" />
+        <AttendanceHubTabs />
+
+        <ModuleInfoCard
+            storage-key="capturar-asistencia"
+            what-is-it="Registra entradas, salidas e incidencias del personal. Usa este módulo durante la operación diaria."
+            when-to-use="Cuando estés en campo con tus colaboradores y necesites marcar su asistencia del día."
+            :steps="['Elige empresa, punto de servicio y fecha.', 'Elige la acción: entrada, salida, incidencia o manual.', 'Selecciona a uno o varios colaboradores.', 'Si se requiere foto, captúrala para cada uno.', 'Guarda y confirma.']"
+        />
 
         <Alert v-if="photosRequired" class="mb-6 border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40">
             <Camera class="h-4 w-4 text-amber-700 dark:text-amber-400" />
@@ -545,9 +573,14 @@ const noClientsMessage = computed(() =>
                             <AttendanceEmployeePicker v-model="selectedEmployeeIds" :options="pickerOptions" />
                         </div>
 
-                        <div v-if="photosRequired && selectedEmployeeIds.length" class="mb-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
-                            <Camera class="h-4 w-4" />
-                            <span>{{ photosCapturedCount }} de {{ selectedEmployeeIds.length }} fotografías capturadas</span>
+                        <div v-if="photosRequired && selectedEmployeeIds.length" class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+                            <div class="flex items-center gap-2">
+                                <Camera class="h-4 w-4" />
+                                <span>{{ photosCapturedCount }} de {{ selectedEmployeeIds.length }} fotografías capturadas</span>
+                            </div>
+                            <Button type="button" size="sm" @click="photoQueueOpen = true">
+                                <Camera class="mr-2 h-3.5 w-3.5" /> Capturar fotografías pendientes
+                            </Button>
                         </div>
 
                         <template v-if="!selectedEmployeeIds.length">
@@ -628,6 +661,15 @@ const noClientsMessage = computed(() =>
             :warning-text="settings.warning_text"
             @accept="acceptWarning"
             @cancel="action = null"
+        />
+
+        <AttendancePhotoQueue
+            :employees="photoQueueEmployees"
+            :photos="photos"
+            :required="photosRequired"
+            :open="photoQueueOpen"
+            @update:photo="updatePhoto"
+            @close="photoQueueOpen = false"
         />
     </div>
 </template>

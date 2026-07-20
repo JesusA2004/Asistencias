@@ -128,7 +128,7 @@ const columns: ColumnDef<ShiftRow>[] = [
 
 <template>
     <div class="p-6">
-        <PageHeader title="Turnos" description="Configuración de horarios y días laborables">
+        <PageHeader title="Turnos" description="Horarios de trabajo y tolerancias de entrada por turno.">
             <template #actions>
                 <Button v-if="hasPermission('Crear turnos')" @click="openCreate">
                     <Plus class="h-4 w-4 mr-2" /> Nuevo Turno

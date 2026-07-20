@@ -4,11 +4,13 @@ import { Pencil, Search, Trash2, X } from '@lucide/vue';
 import type {ColumnDef} from '@tanstack/vue-table';
 import { computed, ref, watch } from 'vue';
 import AppDataTable from '@/components/AppDataTable.vue';
+import AttendanceHubTabs from '@/components/AttendanceHubTabs.vue';
 import DatePicker from '@/components/DatePicker.vue';
 import FormActions from '@/components/FormActions.vue';
 import FormDialogContent from '@/components/FormDialogContent.vue';
 import FormField from '@/components/FormField.vue';
 import FormTextarea from '@/components/FormTextarea.vue';
+import ModuleInfoCard from '@/components/ModuleInfoCard.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import SearchableSelect from '@/components/SearchableSelect.vue';
 import StatusBadge from '@/components/StatusBadge.vue';
@@ -85,7 +87,7 @@ return;
     });
 };
 
-const onPage = (p: number) => router.get('/asistencias', { ...props.filters, page: p }, { preserveState: true });
+const onPage = (p: number) => router.get('/asistencias/gestion', { ...props.filters, page: p }, { preserveState: true });
 
 type SelectModel = string | number | null;
 
@@ -109,7 +111,7 @@ const hasActiveFilters = computed(() => !!(
 ));
 
 const applyFilters = () => {
-    router.get('/asistencias', {
+    router.get('/asistencias/gestion', {
         date: filterDate.value || undefined,
         client_id: filterClient.value || undefined,
         service_point_id: filterSP.value || undefined,
@@ -132,7 +134,7 @@ const clearFilters = () => {
     filterSP.value = '';
     filterStatus.value = '';
     filterEmployeeSearch.value = '';
-    router.get('/asistencias', {}, { preserveState: true, replace: true });
+    router.get('/asistencias/gestion', {}, { preserveState: true, replace: true });
 };
 
 const columns: ColumnDef<Attendance>[] = [
@@ -149,10 +151,18 @@ const columns: ColumnDef<Attendance>[] = [
 <template>
     <div class="p-6">
         <PageHeader title="Gestión de Asistencias" description="Consulta y corrección de registros de asistencia" />
+        <AttendanceHubTabs />
+
+        <ModuleInfoCard
+            storage-key="gestion-asistencias"
+            what-is-it="Consulta, filtra, corrige o elimina registros ya capturados. Este módulo es para revisión administrativa."
+            when-to-use="Cuando necesites revisar lo ya registrado, corregir un dato erróneo o eliminar un registro duplicado."
+            :steps="['Filtra por empresa, punto de servicio, fecha o estatus.', 'Revisa el listado de registros.', 'Corrige o elimina el registro que lo requiera, indicando el motivo.']"
+        />
 
         <!-- Filters -->
         <div class="space-y-3 mb-6 bg-muted/30 p-4 rounded-lg border">
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
                 <FormField label="Fecha" class="text-xs">
                     <DatePicker v-model="filterDate" placeholder="Todas las fechas" />
                 </FormField>
