@@ -50,12 +50,13 @@ const patch = <K extends keyof SettingsFormData>(key: K, value: SettingsFormData
                 </CardHeader>
                 <CardContent class="space-y-2">
                     <p class="px-1 pb-1 text-xs text-muted-foreground">
-                        Estas opciones aplican al módulo Mi Asistencia del colaborador.
+                        Estas opciones aplican cuando el colaborador registra su propia asistencia desde Mi Asistencia.
                     </p>
                     <SettingsToggleCard
                         title="Permitir asistencia propia del colaborador"
                         :description="desc('allow_employee_self_attendance')"
                         :model-value="modelValue.allow_employee_self_attendance"
+                        active-hint="El colaborador podrá usar el módulo Mi Asistencia."
                         @update:model-value="patch('allow_employee_self_attendance', $event)"
                     />
                     <SettingsToggleCard
@@ -64,6 +65,7 @@ const patch = <K extends keyof SettingsFormData>(key: K, value: SettingsFormData
                         :model-value="modelValue.employee_self_attendance_requires_photo"
                         :disabled="!modelValue.allow_employee_self_attendance"
                         :tooltip="!modelValue.allow_employee_self_attendance ? 'Activa primero la asistencia propia del colaborador.' : undefined"
+                        active-hint="Entrada y salida propias requerirán fotografía. Sin excepciones."
                         @update:model-value="patch('employee_self_attendance_requires_photo', $event)"
                     />
                     <SettingsToggleCard
@@ -93,17 +95,15 @@ const patch = <K extends keyof SettingsFormData>(key: K, value: SettingsFormData
                 </CardHeader>
                 <CardContent class="space-y-2">
                     <p class="px-1 pb-1 text-xs text-muted-foreground">
-                        Estas opciones aplican al módulo Capturar Asistencia.
+                        Estas opciones aplican cuando un supervisor, admin o RH registra asistencia de colaboradores desde Capturar Asistencia.
                     </p>
                     <SettingsToggleCard
                         title="Exigir foto al capturar asistencia"
                         :description="desc('supervisor_capture_requires_photo')"
                         :model-value="modelValue.supervisor_capture_requires_photo"
+                        active-hint="Entrada y salida requerirán fotografía. Aplica también a admin y RH. Sin excepciones."
                         @update:model-value="patch('supervisor_capture_requires_photo', $event)"
                     />
-                    <p class="px-1 text-xs text-muted-foreground">
-                        Cuando está activo, quien capture (supervisor, admin o RH) deberá tomar una fotografía por cada colaborador seleccionado antes de poder guardar entrada o salida. Sin excepciones.
-                    </p>
                 </CardContent>
             </Card>
 
@@ -115,7 +115,7 @@ const patch = <K extends keyof SettingsFormData>(key: K, value: SettingsFormData
                 </CardHeader>
                 <CardContent class="space-y-3">
                     <p class="px-1 text-xs text-muted-foreground">
-                        Controla la galería de evidencias y la retención de fotografías.
+                        Controla la galería de evidencias y cuánto tiempo se conservarán las fotografías.
                     </p>
                     <SettingsToggleCard
                         title="Habilitar visualizador de evidencias"

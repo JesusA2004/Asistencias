@@ -214,6 +214,9 @@ void startCamera();
 
         <div class="space-y-1 text-center">
             <p v-if="status !== 'error'" class="text-xs font-medium text-foreground">{{ faceHint }}</p>
+            <p v-if="status !== 'error'" class="text-xs text-muted-foreground">
+                Puede ser tipo selfie o similar, pero debe verse claramente al colaborador y, de preferencia, su lugar de trabajo.
+            </p>
             <p class="text-xs text-muted-foreground">
                 La fotografía se toma directamente con la cámara. No se permite subir imágenes desde la galería.
             </p>

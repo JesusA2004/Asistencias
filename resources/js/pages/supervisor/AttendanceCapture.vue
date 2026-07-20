@@ -268,6 +268,8 @@ const incidentRequiresNotes = computed(() => incidentStatus.value === 'permiso' 
 
 const photosCapturedCount = computed(() => selectedEmployeeIds.value.filter((id) => !!photos.value[id]).length);
 
+const photoQueueButtonLabel = computed(() => (selectedEmployeeIds.value.length === 1 ? 'Capturar fotografía' : 'Capturar fotografías pendientes'));
+
 const photoQueueEmployees = computed(() => selectedEmployeeIds.value.map((id) => {
     const e = employeesById.value.get(id);
 
@@ -565,14 +567,26 @@ const noClientsMessage = computed(() =>
                             <AttendanceEmployeePicker v-model="selectedEmployeeIds" :options="pickerOptions" />
                         </div>
 
-                        <div v-if="photosRequired && selectedEmployeeIds.length" class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
-                            <div class="flex items-center gap-2">
-                                <Camera class="h-4 w-4" />
-                                <span>{{ photosCapturedCount }} de {{ selectedEmployeeIds.length }} fotografías capturadas</span>
+                        <div v-if="photosRequired && selectedEmployeeIds.length" class="mb-6 rounded-xl border-2 border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/30">
+                            <div class="mb-3 flex items-start gap-3">
+                                <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900">
+                                    <Camera class="h-4.5 w-4.5 text-amber-700 dark:text-amber-400" />
+                                </div>
+                                <div>
+                                    <p class="text-sm font-semibold text-amber-900 dark:text-amber-200">Evidencia fotográfica obligatoria</p>
+                                    <p class="text-xs text-amber-800/80 dark:text-amber-300/70">
+                                        Debes capturar una fotografía por cada colaborador seleccionado antes de guardar el registro.
+                                    </p>
+                                </div>
                             </div>
-                            <Button type="button" size="sm" @click="photoQueueOpen = true">
-                                <Camera class="mr-2 h-3.5 w-3.5" /> Capturar fotografías pendientes
-                            </Button>
+                            <div class="flex flex-wrap items-center justify-between gap-3">
+                                <span class="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                                    {{ photosCapturedCount }} de {{ selectedEmployeeIds.length }} foto{{ selectedEmployeeIds.length === 1 ? '' : 's' }} capturada{{ selectedEmployeeIds.length === 1 ? '' : 's' }}
+                                </span>
+                                <Button type="button" @click="photoQueueOpen = true">
+                                    <Camera class="mr-2 h-4 w-4" /> {{ photoQueueButtonLabel }}
+                                </Button>
+                            </div>
                         </div>
 
                         <template v-if="!selectedEmployeeIds.length">
