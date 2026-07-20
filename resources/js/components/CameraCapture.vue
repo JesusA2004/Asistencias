@@ -15,10 +15,12 @@ const props = withDefaults(
     },
 );
 
+export type CameraErrorType = 'permission_denied' | 'not_found' | 'not_readable' | 'unsupported' | 'unknown';
+
 const emit = defineEmits<{
     captured: [file: File];
     cancel: [];
-    error: [message: string];
+    error: [message: string, type: CameraErrorType];
 }>();
 
 const videoRef = ref<HTMLVideoElement | null>(null);
@@ -29,6 +31,7 @@ const currentFacingMode = ref<'user' | 'environment'>(props.facingMode);
 const canSwitchCamera = ref(false);
 const status = ref<'starting' | 'live' | 'preview' | 'error'>('starting');
 const errorMessage = ref('');
+const errorType = ref<CameraErrorType>('unknown');
 const previewUrl = ref<string | null>(null);
 const capturedFile = ref<File | null>(null);
 
@@ -37,22 +40,30 @@ const stopStream = () => {
     stream.value = null;
 };
 
-const mapError = (err: unknown): string => {
+const mapErrorType = (err: unknown): CameraErrorType => {
     const name = err instanceof DOMException ? err.name : '';
 
     if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
-        return 'Debes permitir el acceso a la cámara para registrar asistencia.';
+        return 'permission_denied';
     }
 
     if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
-        return 'Este dispositivo no tiene cámara disponible. No es posible registrar asistencia con evidencia obligatoria.';
+        return 'not_found';
     }
 
     if (name === 'NotReadableError') {
-        return 'La cámara está siendo usada por otra aplicación. Ciérrala e intenta de nuevo.';
+        return 'not_readable';
     }
 
-    return 'No se pudo acceder a la cámara. Verifica los permisos o intenta con otro navegador.';
+    return 'unknown';
+};
+
+const ERROR_MESSAGES: Record<CameraErrorType, string> = {
+    permission_denied: 'Debes permitir el acceso a la cámara para registrar asistencia.',
+    not_found: 'Este dispositivo no tiene cámara disponible. No es posible registrar asistencia con evidencia obligatoria.',
+    not_readable: 'La cámara está siendo usada por otra aplicación. Ciérrala e intenta de nuevo.',
+    unsupported: 'Tu navegador no soporta captura de cámara. Usa un navegador actualizado.',
+    unknown: 'No se pudo acceder a la cámara. Verifica los permisos o intenta con otro navegador.',
 };
 
 const detectMultipleCameras = async () => {
@@ -69,9 +80,10 @@ const startCamera = async () => {
     errorMessage.value = '';
 
     if (!navigator.mediaDevices?.getUserMedia) {
-        errorMessage.value = 'Tu navegador no soporta captura de cámara. Usa un navegador actualizado.';
+        errorType.value = 'unsupported';
+        errorMessage.value = ERROR_MESSAGES.unsupported;
         status.value = 'error';
-        emit('error', errorMessage.value);
+        emit('error', errorMessage.value, errorType.value);
         notify.error(errorMessage.value, 'No se pudo abrir la cámara');
 
         return;
@@ -92,9 +104,10 @@ const startCamera = async () => {
         status.value = 'live';
         void detectMultipleCameras();
     } catch (err) {
-        errorMessage.value = mapError(err);
+        errorType.value = mapErrorType(err);
+        errorMessage.value = ERROR_MESSAGES[errorType.value];
         status.value = 'error';
-        emit('error', errorMessage.value);
+        emit('error', errorMessage.value, errorType.value);
         notify.error(errorMessage.value, 'No se pudo abrir la cámara');
     }
 };

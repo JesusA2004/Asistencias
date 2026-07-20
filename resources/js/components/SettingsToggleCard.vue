@@ -25,7 +25,7 @@ const emit = defineEmits<{
     'update:modelValue': [value: boolean];
 }>();
 
-const label = computed(() => {
+const statusLabel = computed(() => {
     if (props.disabled) {
         return 'No aplica';
     }
@@ -33,10 +33,20 @@ const label = computed(() => {
     return props.modelValue ? 'Activado' : 'Desactivado';
 });
 
-// Todo el row es un <button> que niega modelValue directamente al hacer clic —
-// no depende de la semántica interna de click/checked del componente Switch, que
-// es lo que dejaba el badge desincronizado del estado real.
-const toggle = () => {
+// El Switch es quien manda: reenviamos el valor que ÉL calculó (respeta su propio
+// contrato de componente controlado) en vez de negar modelValue nosotros mismos —
+// eso era lo que dejaba el badge y el thumb visual desincronizados entre sí.
+const onCheckedChange = (checked: boolean) => {
+    if (props.disabled) {
+        return;
+    }
+
+    emit('update:modelValue', checked);
+};
+
+// Clic en cualquier parte de la card fuera del switch también alterna (el switch
+// detiene la propagación del clic para no disparar esto además de su propio evento).
+const onCardClick = () => {
     if (props.disabled) {
         return;
     }
@@ -46,23 +56,21 @@ const toggle = () => {
 </script>
 
 <template>
-    <button
-        type="button"
-        :disabled="disabled"
+    <div
         :title="disabled ? tooltip : undefined"
-        class="w-full rounded-lg border p-4 text-left transition-all hover:shadow-sm"
+        class="rounded-xl border p-4 transition-all"
         :class="[
-            disabled ? 'cursor-not-allowed opacity-60' : 'hover:border-primary/30',
-            !disabled && modelValue ? 'border-primary/40 bg-primary/[0.03]' : '',
+            disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:shadow-md hover:border-primary/30',
+            !disabled && modelValue ? 'border-primary/40 bg-primary/[0.04]' : '',
         ]"
-        @click="toggle"
+        @click="onCardClick"
     >
         <div class="flex items-start justify-between gap-4">
-            <div class="space-y-1">
+            <div class="min-w-0 space-y-1">
                 <div class="flex flex-wrap items-center gap-2">
-                    <p class="text-sm font-medium leading-none">{{ title }}</p>
+                    <p class="text-sm font-semibold leading-none">{{ title }}</p>
                     <Badge :variant="modelValue && !disabled ? 'default' : 'outline'" class="text-[10px] font-semibold uppercase tracking-wide">
-                        {{ label }}
+                        {{ statusLabel }}
                     </Badge>
                 </div>
 
@@ -72,7 +80,7 @@ const toggle = () => {
                 <p v-else-if="modelValue && activeHint" class="text-xs font-medium text-primary">{{ activeHint }}</p>
             </div>
 
-            <Switch :checked="modelValue" :disabled="disabled" @click.stop="toggle" />
+            <Switch :checked="modelValue" :disabled="disabled" @click.stop @update:checked="onCheckedChange" />
         </div>
-    </button>
+    </div>
 </template>

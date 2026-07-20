@@ -67,6 +67,11 @@ const saving = ref(false);
 const photos = ref<Record<number, File | null>>({});
 const warningAccepted = ref(false);
 const photoQueueOpen = ref(false);
+const cameraUnavailable = ref(false);
+
+const onCameraError = () => {
+    cameraUnavailable.value = true;
+};
 
 // La incidencia no exige evidencia fotográfica aunque la captura con foto esté
 // activa en Configuración: no hay una asistencia física que fotografiar.
@@ -502,6 +507,14 @@ const noClientsMessage = computed(() =>
             </AlertDescription>
         </Alert>
 
+        <Alert v-if="cameraUnavailable" variant="destructive" class="mb-6">
+            <AlertTriangle class="h-4 w-4" />
+            <AlertTitle>No se puede registrar entrada/salida desde este dispositivo</AlertTitle>
+            <AlertDescription>
+                La evidencia fotográfica es obligatoria y no se detectó cámara disponible. Usa un dispositivo con cámara o solicita apoyo a un administrador autorizado.
+            </AlertDescription>
+        </Alert>
+
         <AttendanceGuidedEmptyState
             v-if="!clients.length"
             title="Sin empresas disponibles"
@@ -676,6 +689,7 @@ const noClientsMessage = computed(() =>
             :open="photoQueueOpen"
             @update:photo="updatePhoto"
             @close="photoQueueOpen = false"
+            @camera-error="onCameraError"
         />
     </div>
 </template>
